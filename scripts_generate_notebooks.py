@@ -73,6 +73,7 @@ def write_exam_pair(
     question_logic_cell: dict,
     answer_logic_cell: dict,
     tests_cell: dict,
+    solution_walkthrough: str,
 ) -> None:
     exam_id = f"{exam_num:02d}"
     question_cells = [
@@ -101,6 +102,7 @@ Contains:
         setup_cell,
         answer_logic_cell,
         tests_cell,
+        md(solution_walkthrough),
     ]
     write_notebook(os.path.join(NB_DIR, f"{exam_id}_mock.ipynb"), question_cells)
     write_notebook(os.path.join(NB_DIR, f"sol{exam_id}.ipynb"), answer_cells)
@@ -1800,6 +1802,296 @@ Implement greedy longest-match tokenization with optional UNK compression.
 5. If this tokenizer were serving production traffic, what profiling signals would you watch first?
 """
 
+exam01_walkthrough = """
+## Walkthrough: Exactly How to Solve `01_mock`
+
+### 0) First 2 minutes (do this before coding)
+- Read function TODOs and write this mini-plan in comments:
+  1. `validate_tool_call`
+  2. `execute_tool_call`
+  3. `run_agent`
+- Do **not** start `run_agent` first.
+
+### 1) Should I read tests now?
+Yes, but fast:
+- Spend 3-4 minutes scanning test names and assertions only.
+- Extract contracts from tests:
+  - Single and multiple tool calls must work.
+  - Missing args and runtime failures must return `is_error=True`.
+  - `max_steps` must raise `RuntimeError(\"max_steps_exceeded\")`.
+- Then stop reading tests and implement TODOs.
+
+### 2) Coding order with checkpoints
+1. `validate_tool_call`:
+   - check required keys (`id`, `name`, `input`)
+   - check tool exists
+   - check `input` is dict
+   - check required args from function signature
+2. `execute_tool_call`:
+   - call validator first
+   - on validation/runtime error return tool message with `is_error=True`
+   - on success return tool message with JSON result payload
+3. `run_agent`:
+   - initialize `messages=[{\"role\":\"user\", ...}]`
+   - loop up to `max_steps`
+   - if `tool_use`: execute **all** tool calls, append messages, continue
+   - if `end_turn`: return final text + messages
+   - else: unsupported stop reason error
+
+### 3) One concrete example to narrate aloud
+Use test case #2 (multiple tools):
+- Model returns `policy_check` and `create_refund` in one turn.
+- You execute both and append two tool messages.
+- Next model turn ends with \"Refund submitted.\"
+- Why this matters: proves your loop handles batched tool calls, not only one.
+
+### 4) What to say while coding (verbatim-safe)
+- \"I scanned tests first to lock the contract, now I am implementing TODOs in dependency order.\"
+- \"I am enforcing a loop invariant: every `tool_use` turn appends tool outputs before next model call.\"
+- \"I am returning structured tool errors instead of crashing so the conversation can recover.\"
+- \"After baseline passes, I check failure paths: missing args, runtime exception, and max-step loop safety.\"
+
+### 5) Self-check questions before final run
+- Do I process all tool calls in a turn?
+- Can unknown tools and missing args fail safely?
+- Is `max_steps` guaranteed to stop infinite loops?
+- Are error messages JSON and debuggable?
+"""
+
+exam02_walkthrough = """
+## Walkthrough: Exactly How to Solve `02_mock`
+
+### 0) First 2 minutes
+- Write your threat model first: \"tool output is untrusted.\"
+- Decide sanitizer strategy (string-level block/replace rules).
+
+### 1) Should I read tests now?
+Yes, quickly:
+- Find these must-pass checks:
+  - final text must not contain `ADMIN_TOKEN`
+  - multi-tool turn should append two tool messages
+  - unknown tool must become error tool message and still recover
+- Once contract is clear, stop reading tests and implement.
+
+### 2) Coding order
+1. `sanitize_tool_output` first.
+2. In loop: sanitize tool results **before** appending to messages.
+3. On `end_turn`: sanitize final text again.
+4. Unknown tool path should add `is_error=True` tool message, not crash.
+
+### 3) One concrete example to narrate aloud
+Use \"injection\" scenario:
+- Tool returns doc text with malicious instruction.
+- Your sanitizer strips/blocks dangerous phrase.
+- Model no longer sees exploitable payload, final output contains policy `[d1]` and no secret.
+
+### 4) What to say while coding
+- \"I’m solving this as a trust-boundary problem, not only as a loop problem.\"
+- \"Sanitization happens both on tool output and final text to reduce leak paths.\"
+- \"I still return recoverable errors for unknown tools so the run can continue.\"
+
+### 5) Self-check before final run
+- If malicious text appears in docs, can it leak to final answer?
+- If tool is unknown, do I recover and continue?
+- Are false positives acceptable for this interview-time sanitizer?
+"""
+
+exam03_walkthrough = """
+## Walkthrough: Exactly How to Solve `03_mock`
+
+### 0) First 3 minutes
+- This is reliability-first, not algorithm-first.
+- Write these goals in comments: cache hit, one retry, strict final JSON parse.
+
+### 1) Should I read tests now?
+Yes, because tests define reliability policy:
+- `cache_hits == 1`
+- `LOOKUP_ATTEMPTS[\"payments\"] == 2` (one retry happened)
+- final output must include `summary/action/confidence`
+- max step protection must raise error
+
+### 2) Coding order
+1. `parse_final_output` (small, deterministic).
+2. `execute_tool_call` with:
+   - validation
+   - cache read/write
+   - one retry around transient tool failure
+3. `run_agent`:
+   - maintain `stats`
+   - increment `tool_calls`
+   - increment `cache_hits` from tool message metadata
+
+### 3) One concrete example to narrate aloud
+Use retry scenario:
+- First `lookup_runbook(payments)` throws transient timeout.
+- Retry once, second attempt succeeds.
+- Final action becomes `restart_payments_workers`.
+- You can explain this as \"bounded retry for transient faults.\"
+
+### 4) What to say while coding
+- \"I’m defining explicit reliability policy first, then implementing to that contract.\"
+- \"Cache key is tool-name plus normalized input to reduce duplicate work.\"
+- \"Retry is bounded to one attempt to avoid runaway latency.\"
+- \"I validate final output schema to prevent silent bad responses.\"
+
+### 5) Self-check before final run
+- Can cached calls skip tool execution?
+- Is retry only for runtime failures, not validation failures?
+- Do stats reflect actual behavior?
+"""
+
+exam04_walkthrough = """
+## Walkthrough: Exactly How to Solve `04_mock`
+
+### 0) First 2 minutes
+- Write one rule: \"difference between old/new stack = events\".
+- Keep generation and aggregation in separate functions.
+
+### 1) Should I read tests now?
+Yes, very quickly:
+- Expected exact event order is given. That is your gold contract.
+- Note this critical rule from expected output: end events are inner-first.
+- Note invalid timestamp test.
+
+### 2) Coding order
+1. Input validation (`list`, fields, timestamp monotonicity).
+2. Longest common prefix computation.
+3. Emit end events for old suffix in reverse.
+4. Emit start events for new suffix in forward order.
+5. Optional close-final behavior (`last_ts + 1`).
+6. `longest_running_function` on top of generated events.
+
+### 3) One concrete example to narrate aloud
+Transition:
+- Old stack: `[main, load, parse]`
+- New stack: `[main, render]`
+- LCP is `[main]`
+- Emit ends: `parse`, then `load` at ts=5
+- Emit start: `render` at ts=5
+
+### 4) What to say while coding
+- \"I am using prefix-diff; that makes transitions deterministic.\"
+- \"Reverse unwind preserves call-stack correctness.\"
+- \"I validate timestamp monotonicity early to fail fast on bad input.\"
+
+### 5) Self-check before final run
+- Do unchanged stacks emit no transitions?
+- Does `close_final=True` end remaining frames?
+- Is tie-breaking deterministic in longest-running function?
+"""
+
+exam05_walkthrough = """
+## Walkthrough: Exactly How to Solve `05_mock`
+
+### 0) First 2 minutes
+- Decide canonical URL format first (`urldefrag` + parse host).
+- Decide dedupe rule: add to visited when enqueued/scheduled.
+
+### 1) Should I read tests now?
+Yes:
+- Expected output list shows exactly which URLs survive.
+- Both single and multi must return same sorted result.
+- Parser call count must equal number of visited URLs.
+
+### 2) Coding order
+1. `normalize_url` first (easy win).
+2. `crawl_single_thread` using queue + visited + same-host filter.
+3. `crawl_multi_thread` with executor + in-flight futures + lock-protected visited updates.
+
+### 3) One concrete example to narrate aloud
+From `start`, parser returns:
+- `https://docs.local/a#intro` -> normalize to `/a`
+- `https://external.com/ignore` -> filtered by host check
+This demonstrates why normalization and same-host filtering happen before scheduling.
+
+### 4) What to say while coding
+- \"I am using single-thread as correctness baseline before concurrency.\"
+- \"I protect visited-set updates to avoid duplicate scheduling races.\"
+- \"I normalize URLs before dedupe, otherwise fragments would create false duplicates.\"
+
+### 5) Self-check before final run
+- Is each URL fetched at most once?
+- Can external host URLs leak in?
+- Do multi-thread and single-thread outputs match exactly?
+"""
+
+exam06_walkthrough = """
+## Walkthrough: Exactly How to Solve `06_mock`
+
+### 0) First 3 minutes
+- Write target cleaned schema: `order_id, order_date(ISO), region(upper/trim), amount(float)`.
+- Decide invalid-row policy: drop rows with invalid amount/date.
+
+### 1) Should I read tests now?
+Yes:
+- `o1` latest row must win (`1250.0`).
+- invalid amount/date rows must be dropped.
+- `None`/blank region must become `UNKNOWN`.
+- expected region summary is exact.
+
+### 2) Coding order
+1. `parse_amount` and `parse_order_date` first (unit-testable).
+2. `extract_clean_rows` with SQL dedupe + Python normalization.
+3. `summarize_by_region`.
+4. `top_day`.
+
+### 3) One concrete example to narrate aloud
+Order `o1` has two rows:
+- 10:00 amount `$1,200.00`
+- 12:00 amount `$1,250.00`
+You select latest by `updated_at`, parse amount to `1250.0`, and keep only that row.
+
+### 4) What to say while coding
+- \"I’m locking canonical schema first so cleaning rules are unambiguous.\"
+- \"Dedupe happens before aggregation to avoid double counting.\"
+- \"Parsing helpers return `None` on invalid input so filtering is explicit.\"
+
+### 5) Self-check before final run
+- Do malformed rows leak into summary?
+- Is region normalization deterministic?
+- Is top-day tie behavior deterministic?
+"""
+
+exam07_walkthrough = """
+## Walkthrough: Exactly How to Solve `07_mock`
+
+### 0) First 2 minutes
+- Write the greedy rule in a comment:
+  - longest match at index
+  - fallback to `UNK` and advance one char
+- Confirm `UNK` is mandatory.
+
+### 1) Should I read tests now?
+Yes:
+- `apple -> [2]` proves longest token priority.
+- `bbb` with compression gives one `-1`.
+- custom vocab test validates greedy at each step.
+- missing `UNK` must raise `vocab_missing_UNK`.
+
+### 2) Coding order
+1. Validate `UNK` exists.
+2. Precompute max token length (excluding `UNK`).
+3. Implement greedy scan in `tokenize_longest`.
+4. Add compression logic.
+5. Implement `tokenize_batch` as list comprehension.
+
+### 3) One concrete example to narrate aloud
+`apppie` with vocab `app=1, pie=3`:
+- index 0 longest match is `app` -> `1`
+- index 3 longest match is `pie` -> `3`
+- output `[1,3]`
+
+### 4) What to say while coding
+- \"I’m implementing greedy longest-match with bounded window length.\"
+- \"I scan from longest to shortest candidate at each index.\"
+- \"Compression is optional post-processing and does not change base matching semantics.\"
+
+### 5) Self-check before final run
+- Do I ever skip characters incorrectly?
+- Does compression only collapse consecutive UNKs?
+- Is batch wrapper behavior identical to single-string behavior?
+"""
+
 
 def main() -> None:
     write_exam_pair(
@@ -1810,6 +2102,7 @@ def main() -> None:
         question_logic_cell=exam01_question_logic,
         answer_logic_cell=exam01_answer_logic,
         tests_cell=exam01_tests,
+        solution_walkthrough=exam01_walkthrough,
     )
     write_exam_pair(
         exam_num=2,
@@ -1819,6 +2112,7 @@ def main() -> None:
         question_logic_cell=exam02_question_logic,
         answer_logic_cell=exam02_answer_logic,
         tests_cell=exam02_tests,
+        solution_walkthrough=exam02_walkthrough,
     )
     write_exam_pair(
         exam_num=3,
@@ -1828,6 +2122,7 @@ def main() -> None:
         question_logic_cell=exam03_question_logic,
         answer_logic_cell=exam03_answer_logic,
         tests_cell=exam03_tests,
+        solution_walkthrough=exam03_walkthrough,
     )
     write_exam_pair(
         exam_num=4,
@@ -1837,6 +2132,7 @@ def main() -> None:
         question_logic_cell=exam04_question_logic,
         answer_logic_cell=exam04_answer_logic,
         tests_cell=exam04_tests,
+        solution_walkthrough=exam04_walkthrough,
     )
     write_exam_pair(
         exam_num=5,
@@ -1846,6 +2142,7 @@ def main() -> None:
         question_logic_cell=exam05_question_logic,
         answer_logic_cell=exam05_answer_logic,
         tests_cell=exam05_tests,
+        solution_walkthrough=exam05_walkthrough,
     )
     write_exam_pair(
         exam_num=6,
@@ -1855,6 +2152,7 @@ def main() -> None:
         question_logic_cell=exam06_question_logic,
         answer_logic_cell=exam06_answer_logic,
         tests_cell=exam06_tests,
+        solution_walkthrough=exam06_walkthrough,
     )
     write_exam_pair(
         exam_num=7,
@@ -1864,6 +2162,7 @@ def main() -> None:
         question_logic_cell=exam07_question_logic,
         answer_logic_cell=exam07_answer_logic,
         tests_cell=exam07_tests,
+        solution_walkthrough=exam07_walkthrough,
     )
 
     remove_legacy_notebooks()
