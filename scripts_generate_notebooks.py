@@ -8,6 +8,16 @@ NB_DIR = os.path.join(ROOT, "notebooks")
 os.makedirs(NB_DIR, exist_ok=True)
 
 
+LEGACY_NOTEBOOKS = [
+    "mock1_real_world_questions.ipynb",
+    "mock1_real_world_answers.ipynb",
+    "mock2_research_injection_questions.ipynb",
+    "mock2_research_injection_answers.ipynb",
+    "mock3_reliability_progressive_questions.ipynb",
+    "mock3_reliability_progressive_answers.ipynb",
+]
+
+
 def _lines(src: str) -> List[str]:
     src = textwrap.dedent(src).strip("\n")
     if not src:
@@ -55,7 +65,58 @@ def write_notebook(path: str, cells: list[dict]) -> None:
         f.write("\n")
 
 
-mock1_setup = code(
+def write_exam_pair(
+    exam_num: int,
+    title: str,
+    question_intro: str,
+    setup_cell: dict,
+    question_logic_cell: dict,
+    answer_logic_cell: dict,
+    tests_cell: dict,
+) -> None:
+    exam_id = f"{exam_num:02d}"
+    question_cells = [
+        md(question_intro),
+        setup_cell,
+        question_logic_cell,
+        md(
+            """
+## Run Tests
+Run this final test cell after implementing all TODO sections.
+"""
+        ),
+        tests_cell,
+    ]
+    answer_cells = [
+        md(
+            f"""
+# sol{exam_id}: {title}
+
+Contains:
+- the same scenario as `{exam_id}_mock`
+- one complete reference implementation
+- grading tests
+"""
+        ),
+        setup_cell,
+        answer_logic_cell,
+        tests_cell,
+    ]
+    write_notebook(os.path.join(NB_DIR, f"{exam_id}_mock.ipynb"), question_cells)
+    write_notebook(os.path.join(NB_DIR, f"sol{exam_id}.ipynb"), answer_cells)
+
+
+def remove_legacy_notebooks() -> None:
+    for name in LEGACY_NOTEBOOKS:
+        path = os.path.join(NB_DIR, name)
+        if os.path.exists(path):
+            os.remove(path)
+
+
+# ---------------------------
+# Exam 01: Tool-use loop
+# ---------------------------
+exam01_setup = code(
     '''
 import inspect
 import json
@@ -121,21 +182,24 @@ class ScriptedModel:
 '''
 )
 
-mock1_question_logic = code(
+exam01_question_logic = code(
     '''
 def validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> str | None:
     """Return an error string if invalid, otherwise None."""
-    # TODO: Validate that:
-    # 1) tool_call has id/name/input
-    # 2) tool exists in registry
-    # 3) required function args are present
-    # 4) input is a dict
+    # TODO:
+    # 1) Ensure tool_call has id/name/input.
+    # 2) Ensure tool exists in registry.
+    # 3) Ensure input is a dict.
+    # 4) Ensure all required function args are present.
     raise NotImplementedError
 
 
 def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> dict[str, Any]:
-    """Always return a tool message dict with is_error bool and content as JSON string."""
-    # TODO: Use validate_tool_call, execute the function, and catch exceptions.
+    """Return tool message with is_error and JSON content."""
+    # TODO:
+    # - Call validate_tool_call first.
+    # - Execute valid tools with **tool_call["input"].
+    # - Catch runtime exceptions and return is_error=True payload.
     # Return shape:
     # {
     #   "role": "tool",
@@ -153,19 +217,18 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    """Run tool-use loop until final response or max_steps is exceeded."""
+    """Run tool-use loop until end_turn or max_steps exhaustion."""
     # TODO:
-    # - Initialize messages with the user prompt.
+    # - Initialize messages with user prompt.
     # - Loop up to max_steps.
-    # - Call model(messages).
-    # - If stop_reason == "tool_use", execute all tool_calls and append tool messages.
-    # - If stop_reason == "end_turn", return {"final_text": ..., "messages": ...}.
-    # - Raise RuntimeError on max_steps exhaustion.
+    # - On stop_reason == "tool_use", execute all tool calls and append tool messages.
+    # - On stop_reason == "end_turn", return {"final_text": ..., "messages": ...}.
+    # - Raise RuntimeError("max_steps_exceeded") if no end_turn in time.
     raise NotImplementedError
 '''
 )
 
-mock1_answer_logic = code(
+exam01_answer_logic = code(
     '''
 def validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> str | None:
     required = {"id", "name", "input"}
@@ -196,13 +259,12 @@ def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callab
 
     validation_error = validate_tool_call(tool_call, tool_registry)
     if validation_error:
-        payload = {"error": validation_error}
         return {
             "role": "tool",
             "tool_call_id": tool_id,
             "name": tool_name,
             "is_error": True,
-            "content": json.dumps(payload, sort_keys=True),
+            "content": json.dumps({"error": validation_error}, sort_keys=True),
         }
 
     try:
@@ -245,8 +307,7 @@ def run_agent(
             continue
 
         if stop_reason == "end_turn":
-            final_text = str(response.get("output_text", "")).strip()
-            return {"final_text": final_text, "messages": messages}
+            return {"final_text": str(response.get("output_text", "")).strip(), "messages": messages}
 
         raise RuntimeError(f"unsupported_stop_reason:{stop_reason}")
 
@@ -254,13 +315,13 @@ def run_agent(
 '''
 )
 
-mock1_tests = code(
+exam01_tests = code(
     '''
 def _tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [m for m in messages if m.get("role") == "tool"]
 
 
-def run_mock1_tests() -> None:
+def run_exam01_tests() -> None:
     reset_state()
 
     # 1) Single tool call
@@ -268,9 +329,7 @@ def run_mock1_tests() -> None:
         [
             {
                 "stop_reason": "tool_use",
-                "tool_calls": [
-                    {"id": "t1", "name": "get_orders", "input": {"user_id": "u-100"}}
-                ],
+                "tool_calls": [{"id": "t1", "name": "get_orders", "input": {"user_id": "u-100"}}],
             },
             {"stop_reason": "end_turn", "output_text": "Order o-900 is delivered."},
         ]
@@ -279,7 +338,7 @@ def run_mock1_tests() -> None:
     assert "delivered" in result["final_text"].lower()
     assert len(_tool_messages(result["messages"])) == 1
 
-    # 2) Multiple tools in one response
+    # 2) Multiple tools in one model turn
     model = ScriptedModel(
         [
             {
@@ -288,35 +347,22 @@ def run_mock1_tests() -> None:
                     {
                         "id": "t2",
                         "name": "policy_check",
-                        "input": {
-                            "order_id": "o-900",
-                            "reason": "damaged",
-                            "days_since_delivery": 3,
-                        },
+                        "input": {"order_id": "o-900", "reason": "damaged", "days_since_delivery": 3},
                     },
-                    {
-                        "id": "t3",
-                        "name": "create_refund",
-                        "input": {"order_id": "o-900", "amount": 42.5},
-                    },
+                    {"id": "t3", "name": "create_refund", "input": {"order_id": "o-900", "amount": 42.5}},
                 ],
             },
             {"stop_reason": "end_turn", "output_text": "Refund submitted."},
         ]
     )
-    result = run_agent("Please refund my damaged item.", model, TOOL_REGISTRY)
+    result = run_agent("Refund my damaged item", model, TOOL_REGISTRY)
     assert len(_tool_messages(result["messages"])) == 2
     assert REFUNDS and REFUNDS[-1]["order_id"] == "o-900"
 
-    # 3) Invalid args should become is_error tool_result
+    # 3) Missing args -> is_error tool message
     model = ScriptedModel(
         [
-            {
-                "stop_reason": "tool_use",
-                "tool_calls": [
-                    {"id": "bad-args", "name": "get_orders", "input": {}},
-                ],
-            },
+            {"stop_reason": "tool_use", "tool_calls": [{"id": "bad-args", "name": "get_orders", "input": {}}]},
             {"stop_reason": "end_turn", "output_text": "Handled error."},
         ]
     )
@@ -325,15 +371,10 @@ def run_mock1_tests() -> None:
     assert tool_msg["is_error"] is True
     assert "missing_required_args" in tool_msg["content"]
 
-    # 4) Tool exception should be captured as error
+    # 4) Runtime exception -> is_error tool message
     model = ScriptedModel(
         [
-            {
-                "stop_reason": "tool_use",
-                "tool_calls": [
-                    {"id": "boom", "name": "get_orders", "input": {"user_id": "boom"}},
-                ],
-            },
+            {"stop_reason": "tool_use", "tool_calls": [{"id": "boom", "name": "get_orders", "input": {"user_id": "boom"}}]},
             {"stop_reason": "end_turn", "output_text": "Handled exception."},
         ]
     )
@@ -342,27 +383,12 @@ def run_mock1_tests() -> None:
     assert tool_msg["is_error"] is True
     assert "backend unavailable" in tool_msg["content"]
 
-    # 5) Max steps protection
+    # 5) Max step protection
     model = ScriptedModel(
         [
-            {
-                "stop_reason": "tool_use",
-                "tool_calls": [
-                    {"id": "loop", "name": "get_orders", "input": {"user_id": "u-200"}},
-                ],
-            },
-            {
-                "stop_reason": "tool_use",
-                "tool_calls": [
-                    {"id": "loop2", "name": "get_orders", "input": {"user_id": "u-200"}},
-                ],
-            },
-            {
-                "stop_reason": "tool_use",
-                "tool_calls": [
-                    {"id": "loop3", "name": "get_orders", "input": {"user_id": "u-200"}},
-                ],
-            },
+            {"stop_reason": "tool_use", "tool_calls": [{"id": "loop1", "name": "get_orders", "input": {"user_id": "u-200"}}]},
+            {"stop_reason": "tool_use", "tool_calls": [{"id": "loop2", "name": "get_orders", "input": {"user_id": "u-200"}}]},
+            {"stop_reason": "tool_use", "tool_calls": [{"id": "loop3", "name": "get_orders", "input": {"user_id": "u-200"}}]},
         ]
     )
     try:
@@ -371,55 +397,46 @@ def run_mock1_tests() -> None:
     except RuntimeError as exc:
         assert "max_steps_exceeded" in str(exc)
 
-    print("Mock 1 tests passed")
+    print("01_mock tests passed")
 
 
-run_mock1_tests()
+run_exam01_tests()
 '''
 )
 
-mock1_q_cells = [
-    md(
-        '''
-# Mock 1 (Closest to Real Interview): Tool-Using Support Agent
+exam01_intro = """
+# 01_mock: Tool-Using Support Agent
 
 Timebox: **55 minutes**  
 Language: **Python (Colab)**
+
+This is the highest-priority mock for your interview shape.
+
+## Scenario
+Implement an agent loop that uses local tools to inspect orders, evaluate policy, and submit refunds.
 
 ## What to implement
 1. `validate_tool_call`
 2. `execute_tool_call`
 3. `run_agent`
 
-## Requirements
-- Correct tool-use loop (`tool_use` -> execute -> append tool results -> continue)
-- Support multiple tool calls in one response
-- Return error tool results (`is_error=True`) for invalid args and runtime exceptions
-- Enforce `max_steps` to avoid infinite loops
+## Completion criteria (required)
+- Correct tool-use loop (`tool_use` -> execute -> append tool messages -> continue)
+- Multiple tool calls in one response
+- Error-safe behavior for invalid args + runtime exceptions
+- `max_steps` protection against infinite loops
 
-This mock is intentionally closest to the real-world interview pattern.
-'''
-    ),
-    mock1_setup,
-    mock1_question_logic,
-    md('''## Run tests\nRun this test cell after implementing TODOs.'''),
-    mock1_tests,
-]
+## Time guidance
+- 10 min: read scaffold + plan flow
+- 35 min: implement required functions
+- 10 min: run tests + edge-case cleanup
+"""
 
-mock1_a_cells = [
-    md(
-        '''
-# Mock 1 Answer Key: Tool-Using Support Agent
 
-This notebook contains a reference implementation and grading tests.
-'''
-    ),
-    mock1_setup,
-    mock1_answer_logic,
-    mock1_tests,
-]
-
-mock2_setup = code(
+# ---------------------------
+# Exam 02: Safety + injection defense
+# ---------------------------
+exam02_setup = code(
     '''
 import inspect
 import json
@@ -440,7 +457,7 @@ def search_docs(query: str) -> list[dict[str, str]]:
 
 
 def calculator(expression: str) -> float:
-    if not re.fullmatch(r"[0-9+\-*/ ().]+", expression):
+    if not re.fullmatch(r"[0-9+\\-*/ ().]+", expression):
         raise ValueError("invalid expression")
     return float(eval(expression, {"__builtins__": {}}, {}))
 
@@ -482,29 +499,25 @@ class ResearchModel:
                         {"id": "r3", "name": "calculator", "input": {"expression": "40 + 2"}},
                     ],
                 }
-            return {
-                "stop_reason": "end_turn",
-                "output_text": "Shipping is handled in orders API [d3], and 40+2=42.",
-            }
+            return {"stop_reason": "end_turn", "output_text": "Shipping is in orders API [d3], and 40+2=42."}
 
         if self.scenario == "unknown_tool":
             if self.step == 1:
-                return {
-                    "stop_reason": "tool_use",
-                    "tool_calls": [{"id": "bad", "name": "web_search", "input": {"query": "x"}}],
-                }
+                return {"stop_reason": "tool_use", "tool_calls": [{"id": "bad", "name": "web_search", "input": {"query": "x"}}]}
             return {"stop_reason": "end_turn", "output_text": "Recovered from unknown tool."}
 
         return {"stop_reason": "end_turn", "output_text": "Done."}
 '''
 )
 
-mock2_question_logic = code(
+exam02_question_logic = code(
     '''
 def sanitize_tool_output(raw_text: str) -> str:
-    """Strip prompt-injection style instructions from tool outputs before sending back to the model."""
-    # TODO: Remove lines containing imperative instruction patterns such as
-    # "Ignore previous instructions" or "reveal ADMIN_TOKEN".
+    """Remove prompt-injection style instructions before returning tool output to the model."""
+    # TODO:
+    # - Remove lines containing imperative takeover instructions, such as:
+    #   "Ignore previous instructions" / "reveal ADMIN_TOKEN".
+    # - Return sanitized text.
     raise NotImplementedError
 
 
@@ -514,30 +527,27 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    """Run tool-use loop with unknown-tool handling and sanitized tool outputs."""
+    """Run tool-use loop with safe unknown-tool handling and output sanitization."""
     # TODO:
-    # - Build message list from user_prompt
-    # - On tool_use: validate tool existence and required args
-    # - Execute all tool calls
-    # - Append tool messages with JSON content
-    # - Sanitize tool text before appending
-    # - On end_turn: return final_text + messages
-    # - Raise RuntimeError on max_steps exhaustion
+    # - Build message list from user_prompt.
+    # - On tool_use: validate tool call, execute all tool calls, sanitize tool outputs.
+    # - Return tool messages with JSON content.
+    # - On end_turn: return {"final_text": ..., "messages": ...}.
+    # - Raise RuntimeError("max_steps_exceeded") on exhaustion.
     raise NotImplementedError
 '''
 )
 
-mock2_answer_logic = code(
+exam02_answer_logic = code(
     '''
 def sanitize_tool_output(raw_text: str) -> str:
     blocked_patterns = [
         r"ignore previous instructions",
-        r"reveal\s+admin_token",
+        r"reveal\\s+admin_token",
         r"admin_token",
     ]
-    lines = raw_text.splitlines()
     safe_lines: list[str] = []
-    for line in lines:
+    for line in raw_text.splitlines():
         lowered = line.lower()
         if any(re.search(pattern, lowered) for pattern in blocked_patterns):
             continue
@@ -565,7 +575,6 @@ def _validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Call
     ]
     if missing:
         return f"missing_required_args:{','.join(sorted(missing))}"
-
     return None
 
 
@@ -582,34 +591,36 @@ def run_agent(
         stop_reason = response.get("stop_reason")
 
         if stop_reason == "tool_use":
-            for tool_call in response.get("tool_calls", []):
+            tool_calls = response.get("tool_calls", [])
+            if not isinstance(tool_calls, list):
+                raise RuntimeError("tool_calls_must_be_list")
+            for tool_call in tool_calls:
                 tool_id = str(tool_call.get("id", "missing_id"))
                 tool_name = str(tool_call.get("name", "missing_name"))
+
                 err = _validate_tool_call(tool_call, tool_registry)
                 if err:
-                    payload = {"error": err}
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tool_id,
                             "name": tool_name,
                             "is_error": True,
-                            "content": json.dumps(payload, sort_keys=True),
+                            "content": json.dumps({"error": err}, sort_keys=True),
                         }
                     )
                     continue
 
                 try:
                     result = tool_registry[tool_name](**tool_call["input"])
-                    text = json.dumps({"result": result}, sort_keys=True)
-                    sanitized = sanitize_tool_output(text)
+                    safe = sanitize_tool_output(json.dumps({"result": result}, sort_keys=True))
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": tool_id,
                             "name": tool_name,
                             "is_error": False,
-                            "content": sanitized,
+                            "content": safe,
                         }
                     )
                 except Exception as exc:  # pragma: no cover
@@ -625,7 +636,8 @@ def run_agent(
             continue
 
         if stop_reason == "end_turn":
-            return {"final_text": str(response.get("output_text", "")).strip(), "messages": messages}
+            final_text = sanitize_tool_output(str(response.get("output_text", "")).strip())
+            return {"final_text": final_text, "messages": messages}
 
         raise RuntimeError(f"unsupported_stop_reason:{stop_reason}")
 
@@ -633,16 +645,16 @@ def run_agent(
 '''
 )
 
-mock2_tests = code(
+exam02_tests = code(
     '''
-def run_mock2_tests() -> None:
+def run_exam02_tests() -> None:
     # 1) Injection defense
     model = ResearchModel("injection")
     result = run_agent("Can I refund damaged item?", model, TOOL_REGISTRY)
     assert "ADMIN_TOKEN" not in result["final_text"]
     assert "[d1]" in result["final_text"]
 
-    # 2) Multiple tool calls in one response
+    # 2) Multiple tool calls in one model response
     model = ResearchModel("multi_tool")
     result = run_agent("Need shipping policy and math", model, TOOL_REGISTRY)
     tool_msgs = [m for m in result["messages"] if m.get("role") == "tool"]
@@ -656,52 +668,43 @@ def run_mock2_tests() -> None:
     assert "unknown_tool" in tool_msg["content"]
     assert "Recovered" in result["final_text"]
 
-    print("Mock 2 tests passed")
+    print("02_mock tests passed")
 
 
-run_mock2_tests()
+run_exam02_tests()
 '''
 )
 
-mock2_q_cells = [
-    md(
-        '''
-# Mock 2 (Variation): Local Research Agent + Injection Defense
+exam02_intro = """
+# 02_mock: Local Research Agent + Injection Defense
 
 Timebox: **55 minutes**  
 Language: **Python (Colab)**
+
+## Scenario
+Build a local research agent that uses tools safely, including prompt-injection defense on tool output.
 
 ## What to implement
 1. `sanitize_tool_output`
 2. `run_agent`
 
-## Requirements
-- Handle unknown tools and invalid args safely
-- Support multiple tool calls in one model response
-- Sanitize tool outputs before passing them back (prompt-injection defense)
-- Return final answer when `stop_reason == "end_turn"`
-'''
-    ),
-    mock2_setup,
-    mock2_question_logic,
-    md('''## Run tests\nRun this test cell after implementing TODOs.'''),
-    mock2_tests,
-]
+## Completion criteria (required)
+- Safe handling of unknown tools and invalid args
+- Multiple tool calls in one turn
+- Sanitization before tool output is fed back to the model
+- Final answer returned on `stop_reason == "end_turn"`
 
-mock2_a_cells = [
-    md(
-        '''
-# Mock 2 Answer Key: Local Research Agent + Injection Defense
+## Time guidance
+- 10 min: identify security failure modes
+- 35 min: implement sanitize + loop
+- 10 min: run tests + verify no leak paths
+"""
 
-Reference implementation and grading tests.
-'''
-    ),
-    mock2_setup,
-    mock2_answer_logic,
-    mock2_tests,
-]
 
-mock3_setup = code(
+# ---------------------------
+# Exam 03: Reliability loop
+# ---------------------------
+exam03_setup = code(
     '''
 import inspect
 import json
@@ -747,69 +750,52 @@ class TriageModel:
 
         if self.scenario == "cache":
             if self.step == 1:
-                return {
-                    "stop_reason": "tool_use",
-                    "tool_calls": [{"id": "a1", "name": "lookup_runbook", "input": {"service": "billing"}}],
-                }
+                return {"stop_reason": "tool_use", "tool_calls": [{"id": "a1", "name": "lookup_runbook", "input": {"service": "billing"}}]}
             if self.step == 2:
-                return {
-                    "stop_reason": "tool_use",
-                    "tool_calls": [{"id": "a2", "name": "lookup_runbook", "input": {"service": "billing"}}],
-                }
+                return {"stop_reason": "tool_use", "tool_calls": [{"id": "a2", "name": "lookup_runbook", "input": {"service": "billing"}}]}
             return {
                 "stop_reason": "end_turn",
-                "output_text": json.dumps({
-                    "summary": "billing issue mitigated",
-                    "action": "restart_billing_workers",
-                    "confidence": 0.78,
-                }),
+                "output_text": json.dumps({"summary": "billing issue mitigated", "action": "restart_billing_workers", "confidence": 0.78}),
             }
 
         if self.scenario == "retry":
             if self.step == 1:
-                return {
-                    "stop_reason": "tool_use",
-                    "tool_calls": [{"id": "b1", "name": "lookup_runbook", "input": {"service": "payments"}}],
-                }
+                return {"stop_reason": "tool_use", "tool_calls": [{"id": "b1", "name": "lookup_runbook", "input": {"service": "payments"}}]}
             return {
                 "stop_reason": "end_turn",
-                "output_text": json.dumps({
-                    "summary": "payments issue mitigated",
-                    "action": "restart_payments_workers",
-                    "confidence": 0.81,
-                }),
+                "output_text": json.dumps({"summary": "payments issue mitigated", "action": "restart_payments_workers", "confidence": 0.81}),
             }
 
         if self.scenario == "loop":
-            return {
-                "stop_reason": "tool_use",
-                "tool_calls": [{"id": "loop", "name": "fetch_ticket", "input": {"ticket_id": "inc-1"}}],
-            }
+            return {"stop_reason": "tool_use", "tool_calls": [{"id": "loop", "name": "fetch_ticket", "input": {"ticket_id": "inc-1"}}]}
 
         return {"stop_reason": "end_turn", "output_text": "{}"}
 '''
 )
 
-mock3_question_logic = code(
+exam03_question_logic = code(
     '''
 def execute_tool_call(
     tool_call: dict[str, Any],
     tool_registry: dict[str, Callable[..., Any]],
     cache: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
-    """Execute a tool with cache + one retry for transient RuntimeError."""
+    """Execute tool call with cache + one retry for transient RuntimeError."""
     # TODO:
-    # - Validate required fields and args
-    # - Cache key = name + stable JSON of input
-    # - If cached, return cached result with from_cache=True
-    # - On RuntimeError containing 'transient', retry once
-    # - Return tool message dict with is_error/content/from_cache
+    # - Validate required fields and args.
+    # - Cache key = name + stable JSON input.
+    # - Use cache for repeated calls (set from_cache=True).
+    # - Retry once on transient RuntimeError.
+    # - Return tool message: role/tool_call_id/name/is_error/content/from_cache.
     raise NotImplementedError
 
 
 def parse_final_output(output_text: str) -> dict[str, Any]:
-    """Parse and validate structured final output with keys: summary, action, confidence."""
-    # TODO: Parse JSON and validate required keys.
+    """Parse JSON output and validate summary/action/confidence fields."""
+    # TODO:
+    # - Parse JSON.
+    # - Ensure keys summary/action/confidence exist.
+    # - Ensure confidence is numeric.
     raise NotImplementedError
 
 
@@ -819,13 +805,17 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    """Progressive reliability loop: tool execution, cache tracking, retry behavior, structured final output."""
-    # TODO: implement loop + stats (tool_calls, cache_hits)
+    """Run reliability-focused agent loop and return final + stats."""
+    # TODO:
+    # - Track stats: tool_calls, cache_hits.
+    # - On tool_use, execute all tools and append tool messages.
+    # - On end_turn, return parsed final output + stats + messages.
+    # - Raise RuntimeError("max_steps_exceeded") on exhaustion.
     raise NotImplementedError
 '''
 )
 
-mock3_answer_logic = code(
+exam03_answer_logic = code(
     '''
 def _validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> str | None:
     for key in ("id", "name", "input"):
@@ -847,7 +837,6 @@ def _validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Call
     ]
     if missing:
         return f"missing_required_args:{','.join(sorted(missing))}"
-
     return None
 
 
@@ -942,7 +931,10 @@ def run_agent(
         stop_reason = response.get("stop_reason")
 
         if stop_reason == "tool_use":
-            for tool_call in response.get("tool_calls", []):
+            tool_calls = response.get("tool_calls", [])
+            if not isinstance(tool_calls, list):
+                raise RuntimeError("tool_calls_must_be_list")
+            for tool_call in tool_calls:
                 tool_msg = execute_tool_call(tool_call, tool_registry, cache)
                 stats["tool_calls"] += 1
                 if tool_msg.get("from_cache"):
@@ -960,12 +952,12 @@ def run_agent(
 '''
 )
 
-mock3_tests = code(
+exam03_tests = code(
     '''
-def run_mock3_tests() -> None:
+def run_exam03_tests() -> None:
     reset_state()
 
-    # 1) Cache behavior: same tool input should hit cache on second call
+    # 1) Cache behavior
     model = TriageModel("cache")
     result = run_agent("triage billing", model, TOOL_REGISTRY)
     assert result["stats"]["cache_hits"] == 1
@@ -981,7 +973,7 @@ def run_mock3_tests() -> None:
     # 3) Structured final output required
     assert {"summary", "action", "confidence"}.issubset(result["final"].keys())
 
-    # 4) Max steps defense
+    # 4) Max step protection
     model = TriageModel("loop")
     try:
         run_agent("loop", model, TOOL_REGISTRY, max_steps=3)
@@ -989,57 +981,825 @@ def run_mock3_tests() -> None:
     except RuntimeError as exc:
         assert "max_steps_exceeded" in str(exc)
 
-    print("Mock 3 tests passed")
+    print("03_mock tests passed")
 
 
-run_mock3_tests()
+run_exam03_tests()
 '''
 )
 
-mock3_q_cells = [
-    md(
-        '''
-# Mock 3 (Variation): Reliability-Focused Incident Triage Agent
+exam03_intro = """
+# 03_mock: Reliability-Focused Incident Triage Agent
 
 Timebox: **55 minutes**  
 Language: **Python (Colab)**
 
-## Progressive levels
+## Scenario
+You are given an incident triage loop with flaky tools. Add reliability controls expected in production-like agent systems.
+
+## Progressive requirements
 1. Tool execution with validation
-2. Add cache for repeated tool inputs
-3. Add one retry for transient runtime failures
-4. Return structured final output (`summary`, `action`, `confidence`)
+2. Cache for repeated tool inputs
+3. One retry for transient runtime failures
+4. Structured final output (`summary`, `action`, `confidence`)
 
 ## What to implement
 - `execute_tool_call`
 - `parse_final_output`
 - `run_agent`
-'''
-    ),
-    mock3_setup,
-    mock3_question_logic,
-    md('''## Run tests\nRun this test cell after implementing TODOs.'''),
-    mock3_tests,
+
+## Time guidance
+- 10 min: map retry/cache behavior
+- 35 min: implement loop + parsing
+- 10 min: run tests + verify stats
+"""
+
+
+# ---------------------------
+# Exam 04: Stack samples -> trace
+# ---------------------------
+exam04_setup = code(
+    '''
+from collections import defaultdict
+from typing import Any
+
+TRACE_SAMPLES = [
+    {"ts": 0, "stack": ["main"]},
+    {"ts": 1, "stack": ["main", "load"]},
+    {"ts": 3, "stack": ["main", "load", "parse"]},
+    {"ts": 5, "stack": ["main", "render"]},
 ]
 
-mock3_a_cells = [
-    md(
-        '''
-# Mock 3 Answer Key: Reliability-Focused Incident Triage Agent
-
-Reference implementation and grading tests.
+NOOP_SAMPLES = [
+    {"ts": 10, "stack": ["main"]},
+    {"ts": 11, "stack": ["main"]},
+]
 '''
-    ),
-    mock3_setup,
-    mock3_answer_logic,
-    mock3_tests,
+)
+
+exam04_question_logic = code(
+    '''
+def samples_to_events(samples: list[dict[str, Any]], close_final: bool = False) -> list[dict[str, Any]]:
+    """
+    Convert sampled call stacks into trace events.
+
+    Rules:
+    - Emit start when function appears in new stack.
+    - Emit end when function disappears from old stack (inner-most first).
+    - Use current sample ts for transition events.
+    - If close_final=True, emit end events for remaining frames at last_ts + 1.
+    """
+    # TODO:
+    # - Validate sample format: each sample has ts(int) and stack(list[str]).
+    # - Ensure timestamps are non-decreasing.
+    # - Implement prefix-diff logic.
+    raise NotImplementedError
+
+
+def longest_running_function(samples: list[dict[str, Any]]) -> tuple[str, int]:
+    """Return (function_name, total_duration) using events with close_final=True."""
+    # TODO:
+    # - Convert to events with close_final=True.
+    # - Aggregate durations per function.
+    # - Return deterministic winner: max duration, tie -> lexicographically smallest.
+    raise NotImplementedError
+'''
+)
+
+exam04_answer_logic = code(
+    '''
+def samples_to_events(samples: list[dict[str, Any]], close_final: bool = False) -> list[dict[str, Any]]:
+    if not isinstance(samples, list):
+        raise ValueError("samples_must_be_list")
+    if not samples:
+        return []
+
+    events: list[dict[str, Any]] = []
+    prev_ts: int | None = None
+    old_stack: list[str] = []
+
+    for sample in samples:
+        if "ts" not in sample or "stack" not in sample:
+            raise ValueError("sample_missing_required_fields")
+        ts = sample["ts"]
+        new_stack = sample["stack"]
+        if not isinstance(ts, int):
+            raise ValueError("timestamp_must_be_int")
+        if not isinstance(new_stack, list) or any(not isinstance(frame, str) for frame in new_stack):
+            raise ValueError("stack_must_be_list_of_strings")
+        if prev_ts is not None and ts < prev_ts:
+            raise ValueError("timestamps_must_be_non_decreasing")
+        prev_ts = ts
+
+        prefix = 0
+        while prefix < len(old_stack) and prefix < len(new_stack) and old_stack[prefix] == new_stack[prefix]:
+            prefix += 1
+
+        for fn in reversed(old_stack[prefix:]):
+            events.append({"type": "end", "fn": fn, "ts": ts})
+        for fn in new_stack[prefix:]:
+            events.append({"type": "start", "fn": fn, "ts": ts})
+
+        old_stack = list(new_stack)
+
+    if close_final and samples:
+        flush_ts = samples[-1]["ts"] + 1
+        for fn in reversed(old_stack):
+            events.append({"type": "end", "fn": fn, "ts": flush_ts})
+
+    return events
+
+
+def longest_running_function(samples: list[dict[str, Any]]) -> tuple[str, int]:
+    events = samples_to_events(samples, close_final=True)
+    if not events:
+        raise ValueError("no_events")
+
+    open_frames: dict[str, int] = {}
+    durations: defaultdict[str, int] = defaultdict(int)
+    for event in events:
+        fn = event["fn"]
+        ts = event["ts"]
+        if event["type"] == "start":
+            open_frames[fn] = ts
+            continue
+        start_ts = open_frames.pop(fn, None)
+        if start_ts is None:
+            continue
+        durations[fn] += ts - start_ts
+
+    if not durations:
+        raise ValueError("no_durations")
+
+    winner = sorted(durations.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+    return winner
+'''
+)
+
+exam04_tests = code(
+    '''
+def run_exam04_tests() -> None:
+    expected = [
+        {"type": "start", "fn": "main", "ts": 0},
+        {"type": "start", "fn": "load", "ts": 1},
+        {"type": "start", "fn": "parse", "ts": 3},
+        {"type": "end", "fn": "parse", "ts": 5},
+        {"type": "end", "fn": "load", "ts": 5},
+        {"type": "start", "fn": "render", "ts": 5},
+        {"type": "end", "fn": "render", "ts": 6},
+        {"type": "end", "fn": "main", "ts": 6},
+    ]
+    events = samples_to_events(TRACE_SAMPLES, close_final=True)
+    assert events == expected
+
+    # unchanged stack should not emit transitions
+    events = samples_to_events(NOOP_SAMPLES, close_final=True)
+    assert events == [
+        {"type": "start", "fn": "main", "ts": 10},
+        {"type": "end", "fn": "main", "ts": 12},
+    ]
+
+    fn, duration = longest_running_function(TRACE_SAMPLES)
+    assert fn == "main"
+    assert duration == 6
+
+    # invalid timestamps
+    try:
+        samples_to_events([{"ts": 2, "stack": ["main"]}, {"ts": 1, "stack": ["main"]}], close_final=True)
+        raise AssertionError("Expected timestamp validation failure")
+    except ValueError as exc:
+        assert "timestamps_must_be_non_decreasing" in str(exc)
+
+    print("04_mock tests passed")
+
+
+run_exam04_tests()
+'''
+)
+
+exam04_intro = """
+# 04_mock: Stack Samples to Trace Events (Colab-Style Practical Coding)
+
+Timebox: **55 minutes**  
+Language: **Python (Colab)**
+
+This mirrors a repeatedly reported practical coding prompt: convert sampled stacks into trace events.
+
+## Scenario
+Given profiler samples (`timestamp`, `stack`), convert transitions into start/end events and compute the longest-running function.
+
+## What to implement
+1. `samples_to_events`
+2. `longest_running_function`
+
+## Completion criteria (required)
+- Correct prefix-diff logic for nested stack transitions
+- Deterministic end-event ordering (inner-most first)
+- Input validation and timestamp monotonicity checks
+- Correct duration aggregation
+"""
+
+
+# ---------------------------
+# Exam 05: Concurrent crawler
+# ---------------------------
+exam05_setup = code(
+    '''
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from copy import deepcopy
+from threading import Lock
+from typing import Any
+from urllib.parse import urldefrag, urlparse
+import time
+
+WEB_GRAPH = {
+    "https://docs.local/start": [
+        "https://docs.local/a#intro",
+        "https://docs.local/b",
+        "https://external.com/ignore",
+    ],
+    "https://docs.local/a": [
+        "https://docs.local/b",
+        "https://docs.local/c",
+    ],
+    "https://docs.local/b": [
+        "https://docs.local/c#part",
+        "https://docs.local/d",
+    ],
+    "https://docs.local/c": [
+        "https://docs.local/start",
+    ],
+    "https://docs.local/d": [],
+}
+
+
+class FakeHtmlParser:
+    def __init__(self, graph: dict[str, list[str]], delay_seconds: float = 0.0) -> None:
+        self._graph = deepcopy(graph)
+        self._delay_seconds = delay_seconds
+        self._calls: list[str] = []
+        self._lock = Lock()
+
+    def getUrls(self, url: str) -> list[str]:
+        if self._delay_seconds:
+            time.sleep(self._delay_seconds)
+        with self._lock:
+            self._calls.append(url)
+        return deepcopy(self._graph.get(url, []))
+
+    def call_count(self) -> int:
+        with self._lock:
+            return len(self._calls)
+'''
+)
+
+exam05_question_logic = code(
+    '''
+def normalize_url(url: str) -> str:
+    """Remove URL fragments and normalize simple trailing-slash variants."""
+    # TODO
+    raise NotImplementedError
+
+
+def crawl_single_thread(start_url: str, parser: Any) -> list[str]:
+    """
+    Crawl only URLs on the same hostname as start_url.
+    Requirements:
+    - Fetch each normalized URL at most once.
+    - Ignore cross-host links.
+    - Return sorted list of visited URLs.
+    """
+    # TODO
+    raise NotImplementedError
+
+
+def crawl_multi_thread(start_url: str, parser: Any, max_workers: int = 4) -> list[str]:
+    """
+    Same behavior as single-thread crawler but using ThreadPoolExecutor.
+    Keep behavior deterministic via sorted return.
+    """
+    # TODO
+    raise NotImplementedError
+'''
+)
+
+exam05_answer_logic = code(
+    '''
+def normalize_url(url: str) -> str:
+    clean, _ = urldefrag(url)
+    parsed = urlparse(clean)
+    if clean.endswith("/") and parsed.path not in ("", "/"):
+        return clean[:-1]
+    return clean
+
+
+def crawl_single_thread(start_url: str, parser: Any) -> list[str]:
+    start = normalize_url(start_url)
+    host = urlparse(start).hostname
+    visited: set[str] = {start}
+    queue: deque[str] = deque([start])
+
+    while queue:
+        current = queue.popleft()
+        for nxt in parser.getUrls(current):
+            url = normalize_url(nxt)
+            if urlparse(url).hostname != host:
+                continue
+            if url in visited:
+                continue
+            visited.add(url)
+            queue.append(url)
+
+    return sorted(visited)
+
+
+def crawl_multi_thread(start_url: str, parser: Any, max_workers: int = 4) -> list[str]:
+    start = normalize_url(start_url)
+    host = urlparse(start).hostname
+    visited: set[str] = {start}
+    lock = Lock()
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        in_flight: dict[Any, str] = {executor.submit(parser.getUrls, start): start}
+
+        while in_flight:
+            done, _ = wait(set(in_flight), return_when=FIRST_COMPLETED)
+            for future in done:
+                in_flight.pop(future)
+                for nxt in future.result():
+                    url = normalize_url(nxt)
+                    if urlparse(url).hostname != host:
+                        continue
+                    with lock:
+                        if url in visited:
+                            continue
+                        visited.add(url)
+                    in_flight[executor.submit(parser.getUrls, url)] = url
+
+    return sorted(visited)
+'''
+)
+
+exam05_tests = code(
+    '''
+def run_exam05_tests() -> None:
+    expected = [
+        "https://docs.local/a",
+        "https://docs.local/b",
+        "https://docs.local/c",
+        "https://docs.local/d",
+        "https://docs.local/start",
+    ]
+
+    parser_single = FakeHtmlParser(WEB_GRAPH, delay_seconds=0.0)
+    single = crawl_single_thread("https://docs.local/start#home", parser_single)
+    assert single == expected
+    assert parser_single.call_count() == len(expected)
+
+    parser_multi = FakeHtmlParser(WEB_GRAPH, delay_seconds=0.01)
+    multi = crawl_multi_thread("https://docs.local/start#home", parser_multi, max_workers=4)
+    assert multi == expected
+    assert parser_multi.call_count() == len(expected)
+
+    assert single == multi
+    print("05_mock tests passed")
+
+
+run_exam05_tests()
+'''
+)
+
+exam05_intro = """
+# 05_mock: Concurrent Web Crawler (Reported Repeatedly)
+
+Timebox: **55 minutes**  
+Language: **Python (Colab)**
+
+## Scenario
+Implement a same-host crawler first in single-thread mode, then in multi-thread mode.
+
+## What to implement
+1. `normalize_url`
+2. `crawl_single_thread`
+3. `crawl_multi_thread`
+
+## Completion criteria (required)
+- Fragment normalization (`#...`) and consistent URL handling
+- Same-host filtering
+- Each URL fetched at most once
+- Matching output between single-thread and multi-thread implementations
+"""
+
+
+# ---------------------------
+# Exam 06: SQL + Python cleaning
+# ---------------------------
+exam06_setup = code(
+    '''
+import sqlite3
+from collections import defaultdict
+from datetime import datetime
+from typing import Any
+
+RAW_SALES = [
+    ("o1", "2025-01-02", "us", "$1,200.00", "2025-01-02T10:00:00"),
+    ("o1", "2025-01-02", "US", "$1,250.00", "2025-01-02T12:00:00"),  # latest wins
+    ("o2", "01/03/2025", " eu ", "850", "2025-01-03T09:00:00"),
+    ("o3", "2025-01-03", "", "N/A", "2025-01-03T09:30:00"),  # invalid amount -> drop
+    ("o4", "2025-01-04", "apac", "300.5", "2025-01-04T08:00:00"),
+    ("o5", "2025-13-04", "us", "100", "2025-01-04T08:00:00"),  # invalid date -> drop
+    ("o6", "2025-01-04", None, " 99.50 ", "2025-01-04T10:00:00"),
 ]
 
-write_notebook(os.path.join(NB_DIR, "mock1_real_world_questions.ipynb"), mock1_q_cells)
-write_notebook(os.path.join(NB_DIR, "mock1_real_world_answers.ipynb"), mock1_a_cells)
-write_notebook(os.path.join(NB_DIR, "mock2_research_injection_questions.ipynb"), mock2_q_cells)
-write_notebook(os.path.join(NB_DIR, "mock2_research_injection_answers.ipynb"), mock2_a_cells)
-write_notebook(os.path.join(NB_DIR, "mock3_reliability_progressive_questions.ipynb"), mock3_q_cells)
-write_notebook(os.path.join(NB_DIR, "mock3_reliability_progressive_answers.ipynb"), mock3_a_cells)
 
-print("Generated notebooks in", NB_DIR)
+def make_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        """
+        CREATE TABLE sales_raw (
+            order_id TEXT NOT NULL,
+            order_date TEXT NOT NULL,
+            region TEXT,
+            amount_text TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.executemany(
+        "INSERT INTO sales_raw (order_id, order_date, region, amount_text, updated_at) VALUES (?, ?, ?, ?, ?)",
+        RAW_SALES,
+    )
+    conn.commit()
+    return conn
+'''
+)
+
+exam06_question_logic = code(
+    '''
+def parse_amount(amount_text: str) -> float | None:
+    """Parse strings like '$1,200.00' or ' 99.50 ' into float. Return None for invalid values."""
+    # TODO
+    raise NotImplementedError
+
+
+def parse_order_date(raw_date: str) -> str | None:
+    """Normalize date into YYYY-MM-DD from accepted formats (%Y-%m-%d, %m/%d/%Y)."""
+    # TODO
+    raise NotImplementedError
+
+
+def extract_clean_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """
+    Use SQL + Python cleaning rules:
+    - Keep latest record per order_id (max updated_at).
+    - Parse amount/date.
+    - Normalize region to uppercase; blank/null -> UNKNOWN.
+    - Drop rows with invalid amount/date or non-positive amount.
+    - Return rows sorted by order_id.
+    """
+    # TODO
+    raise NotImplementedError
+
+
+def summarize_by_region(rows: list[dict[str, Any]]) -> dict[str, float]:
+    """Return region -> total amount rounded to 2 decimals."""
+    # TODO
+    raise NotImplementedError
+
+
+def top_day(rows: list[dict[str, Any]]) -> tuple[str, float]:
+    """Return (date, total_amount) for highest-revenue day; tie -> earliest date."""
+    # TODO
+    raise NotImplementedError
+'''
+)
+
+exam06_answer_logic = code(
+    '''
+def parse_amount(amount_text: str) -> float | None:
+    raw = amount_text.strip().replace("$", "").replace(",", "")
+    if raw in {"", "N/A", "n/a", "NULL", "null"}:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def parse_order_date(raw_date: str) -> str | None:
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(raw_date, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return None
+
+
+def extract_clean_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    sql = """
+        SELECT s.order_id, s.order_date, s.region, s.amount_text, s.updated_at
+        FROM sales_raw s
+        JOIN (
+            SELECT order_id, MAX(updated_at) AS max_updated_at
+            FROM sales_raw
+            GROUP BY order_id
+        ) latest
+        ON s.order_id = latest.order_id AND s.updated_at = latest.max_updated_at
+        ORDER BY s.order_id
+    """
+    clean: list[dict[str, Any]] = []
+    for order_id, order_date, region, amount_text, _updated_at in conn.execute(sql):
+        amount = parse_amount(amount_text)
+        date_iso = parse_order_date(order_date)
+        region_norm = (region or "").strip().upper() or "UNKNOWN"
+        if amount is None or date_iso is None or amount <= 0:
+            continue
+        clean.append(
+            {
+                "order_id": order_id,
+                "order_date": date_iso,
+                "region": region_norm,
+                "amount": amount,
+            }
+        )
+    return clean
+
+
+def summarize_by_region(rows: list[dict[str, Any]]) -> dict[str, float]:
+    totals: defaultdict[str, float] = defaultdict(float)
+    for row in rows:
+        totals[row["region"]] += float(row["amount"])
+    return {region: round(total, 2) for region, total in sorted(totals.items())}
+
+
+def top_day(rows: list[dict[str, Any]]) -> tuple[str, float]:
+    day_totals: defaultdict[str, float] = defaultdict(float)
+    for row in rows:
+        day_totals[row["order_date"]] += float(row["amount"])
+    if not day_totals:
+        raise ValueError("no_rows")
+    return sorted(day_totals.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+'''
+)
+
+exam06_tests = code(
+    '''
+def run_exam06_tests() -> None:
+    conn = make_connection()
+    rows = extract_clean_rows(conn)
+
+    assert [row["order_id"] for row in rows] == ["o1", "o2", "o4", "o6"]
+    assert rows[0]["amount"] == 1250.0  # latest o1 row wins
+    assert rows[1]["order_date"] == "2025-01-03"
+    assert rows[3]["region"] == "UNKNOWN"
+
+    summary = summarize_by_region(rows)
+    assert summary == {
+        "APAC": 300.5,
+        "EU": 850.0,
+        "UNKNOWN": 99.5,
+        "US": 1250.0,
+    }
+
+    day, total = top_day(rows)
+    assert day == "2025-01-02"
+    assert total == 1250.0
+
+    assert parse_amount("N/A") is None
+    assert parse_order_date("2025-13-01") is None
+
+    print("06_mock tests passed")
+
+
+run_exam06_tests()
+'''
+)
+
+exam06_intro = """
+# 06_mock: SQL + Python Data Cleaning (Practical Applied Task)
+
+Timebox: **55 minutes**  
+Language: **Python (Colab)**
+
+## Scenario
+You are given a demo transactional table with duplicates and dirty fields. Build a clean extraction pipeline using SQL and Python.
+
+## What to implement
+1. `parse_amount`
+2. `parse_order_date`
+3. `extract_clean_rows`
+4. `summarize_by_region`
+5. `top_day`
+
+## Completion criteria (required)
+- Latest-row dedupe per order (`updated_at`)
+- Correct amount/date normalization
+- Invalid-row filtering
+- Correct aggregated metrics
+"""
+
+
+# ---------------------------
+# Exam 07: Tokenizer longest match
+# ---------------------------
+exam07_setup = code(
+    '''
+from typing import Any
+
+VOCAB = {
+    "app": 1,
+    "apple": 2,
+    "pie": 3,
+    "pi": 4,
+    "UNK": -1,
+}
+'''
+)
+
+exam07_question_logic = code(
+    '''
+def tokenize_longest(text: str, vocab: dict[str, int], compress_unk: bool = False) -> list[int]:
+    """
+    Greedy longest-match tokenization:
+    - Scan left to right.
+    - At each index, match longest vocab token (excluding 'UNK').
+    - If no match, emit vocab['UNK'] and advance by 1 char.
+    - If compress_unk=True, collapse consecutive UNK outputs.
+    """
+    # TODO
+    raise NotImplementedError
+
+
+def tokenize_batch(texts: list[str], vocab: dict[str, int], compress_unk: bool = False) -> list[list[int]]:
+    """Tokenize a batch of strings with tokenize_longest."""
+    # TODO
+    raise NotImplementedError
+'''
+)
+
+exam07_answer_logic = code(
+    '''
+def tokenize_longest(text: str, vocab: dict[str, int], compress_unk: bool = False) -> list[int]:
+    if "UNK" not in vocab:
+        raise ValueError("vocab_missing_UNK")
+
+    unk_id = vocab["UNK"]
+    token_lengths = [len(token) for token in vocab if token != "UNK"]
+    max_len = max(token_lengths) if token_lengths else 0
+
+    tokens: list[int] = []
+    i = 0
+    while i < len(text):
+        matched_id: int | None = None
+        matched_len = 0
+
+        upper = min(len(text), i + max_len)
+        for j in range(upper, i, -1):
+            candidate = text[i:j]
+            if candidate in vocab and candidate != "UNK":
+                matched_id = vocab[candidate]
+                matched_len = j - i
+                break
+
+        if matched_id is None:
+            matched_id = unk_id
+            matched_len = 1
+
+        if compress_unk and matched_id == unk_id and tokens and tokens[-1] == unk_id:
+            i += matched_len
+            continue
+
+        tokens.append(matched_id)
+        i += matched_len
+
+    return tokens
+
+
+def tokenize_batch(texts: list[str], vocab: dict[str, int], compress_unk: bool = False) -> list[list[int]]:
+    return [tokenize_longest(text, vocab, compress_unk=compress_unk) for text in texts]
+'''
+)
+
+exam07_tests = code(
+    '''
+def run_exam07_tests() -> None:
+    assert tokenize_longest("apple", VOCAB) == [2]
+    assert tokenize_longest("apppie", VOCAB) == [1, 3]
+    assert tokenize_longest("bbb", VOCAB) == [-1, -1, -1]
+    assert tokenize_longest("bbb", VOCAB, compress_unk=True) == [-1]
+    assert tokenize_longest("appbbbapp", VOCAB, compress_unk=True) == [1, -1, 1]
+
+    custom_vocab = {"a": 7, "ab": 8, "abc": 9, "UNK": -1}
+    assert tokenize_longest("abcabx", custom_vocab) == [9, 8, -1]
+
+    batch = tokenize_batch(["apple", "bbb", "apppie"], VOCAB, compress_unk=True)
+    assert batch == [[2], [-1], [1, 3]]
+
+    try:
+        tokenize_longest("abc", {"a": 1})
+        raise AssertionError("Expected vocab_missing_UNK")
+    except ValueError as exc:
+        assert "vocab_missing_UNK" in str(exc)
+
+    print("07_mock tests passed")
+
+
+run_exam07_tests()
+'''
+)
+
+exam07_intro = """
+# 07_mock: Tokenizer (Greedy Longest Match)
+
+Timebox: **55 minutes**  
+Language: **Python (Colab)**
+
+This mock reflects reported practical coding banks where simple rules + correctness under time pressure matter more than advanced algorithms.
+
+## Scenario
+Implement greedy longest-match tokenization with optional UNK compression.
+
+## What to implement
+1. `tokenize_longest`
+2. `tokenize_batch`
+
+## Completion criteria (required)
+- Correct longest-match behavior
+- Correct UNK fallback behavior
+- Optional compression of consecutive UNKs
+- Batch wrapper correctness
+"""
+
+
+def main() -> None:
+    write_exam_pair(
+        exam_num=1,
+        title="Tool-Using Support Agent",
+        question_intro=exam01_intro,
+        setup_cell=exam01_setup,
+        question_logic_cell=exam01_question_logic,
+        answer_logic_cell=exam01_answer_logic,
+        tests_cell=exam01_tests,
+    )
+    write_exam_pair(
+        exam_num=2,
+        title="Local Research Agent + Injection Defense",
+        question_intro=exam02_intro,
+        setup_cell=exam02_setup,
+        question_logic_cell=exam02_question_logic,
+        answer_logic_cell=exam02_answer_logic,
+        tests_cell=exam02_tests,
+    )
+    write_exam_pair(
+        exam_num=3,
+        title="Reliability-Focused Incident Triage Agent",
+        question_intro=exam03_intro,
+        setup_cell=exam03_setup,
+        question_logic_cell=exam03_question_logic,
+        answer_logic_cell=exam03_answer_logic,
+        tests_cell=exam03_tests,
+    )
+    write_exam_pair(
+        exam_num=4,
+        title="Stack Samples to Trace Events",
+        question_intro=exam04_intro,
+        setup_cell=exam04_setup,
+        question_logic_cell=exam04_question_logic,
+        answer_logic_cell=exam04_answer_logic,
+        tests_cell=exam04_tests,
+    )
+    write_exam_pair(
+        exam_num=5,
+        title="Concurrent Web Crawler",
+        question_intro=exam05_intro,
+        setup_cell=exam05_setup,
+        question_logic_cell=exam05_question_logic,
+        answer_logic_cell=exam05_answer_logic,
+        tests_cell=exam05_tests,
+    )
+    write_exam_pair(
+        exam_num=6,
+        title="SQL + Python Data Cleaning",
+        question_intro=exam06_intro,
+        setup_cell=exam06_setup,
+        question_logic_cell=exam06_question_logic,
+        answer_logic_cell=exam06_answer_logic,
+        tests_cell=exam06_tests,
+    )
+    write_exam_pair(
+        exam_num=7,
+        title="Tokenizer Greedy Longest Match",
+        question_intro=exam07_intro,
+        setup_cell=exam07_setup,
+        question_logic_cell=exam07_question_logic,
+        answer_logic_cell=exam07_answer_logic,
+        tests_cell=exam07_tests,
+    )
+
+    remove_legacy_notebooks()
+    print("Generated notebooks in", NB_DIR)
+
+
+if __name__ == "__main__":
+    main()
