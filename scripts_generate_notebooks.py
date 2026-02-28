@@ -430,6 +430,13 @@ Implement an agent loop that uses local tools to inspect orders, evaluate policy
 - 10 min: read scaffold + plan flow
 - 35 min: implement required functions
 - 10 min: run tests + edge-case cleanup
+
+## Interviewer follow-up questions (prepare answers)
+1. Why did you choose this specific validation strategy for tool calls, and what does it intentionally not validate?
+2. How does your loop guarantee correctness when the model returns multiple tool calls in one turn?
+3. What is the reasoning behind your error payload shape, and how would you make it easier to debug in production?
+4. Why is your `max_steps` policy safe, and what would you tune for real user traffic?
+5. If this moved from scripted responses to the live API, what part of your implementation is most likely to fail first and why?
 """
 
 
@@ -698,6 +705,13 @@ Build a local research agent that uses tools safely, including prompt-injection 
 - 10 min: identify security failure modes
 - 35 min: implement sanitize + loop
 - 10 min: run tests + verify no leak paths
+
+## Interviewer follow-up questions (prepare answers)
+1. What prompt-injection patterns does your sanitizer catch, and where can it still be bypassed?
+2. Why do you sanitize at the points you chose, and what would happen if sanitization only happened once?
+3. How do you balance strict security filtering against removing legitimate content?
+4. Why did you model unknown tools as error tool messages instead of immediately failing the run?
+5. What additional guardrails would you add if tool output came from untrusted external APIs?
 """
 
 
@@ -1012,6 +1026,13 @@ You are given an incident triage loop with flaky tools. Add reliability controls
 - 10 min: map retry/cache behavior
 - 35 min: implement loop + parsing
 - 10 min: run tests + verify stats
+
+## Interviewer follow-up questions (prepare answers)
+1. How did you design cache keys to avoid collisions, and what are the remaining edge cases?
+2. Why is one retry the right default here, and when would you increase or decrease it?
+3. What is your strategy for retry safety if tool calls have side effects?
+4. Why is your structured-output validation strict on `confidence`, and what schema checks are still missing?
+5. How would you use `tool_calls` and `cache_hits` metrics to detect reliability regressions in production?
 """
 
 
@@ -1197,6 +1218,18 @@ Given profiler samples (`timestamp`, `stack`), convert transitions into start/en
 - Deterministic end-event ordering (inner-most first)
 - Input validation and timestamp monotonicity checks
 - Correct duration aggregation
+
+## Time guidance
+- 10 min: confirm event semantics and invariants
+- 35 min: implement conversion and duration aggregation
+- 10 min: run tests and manually inspect tricky transitions
+
+## Interviewer follow-up questions (prepare answers)
+1. Walk through your prefix-diff logic on a sample where two nested frames unwind and one new frame starts.
+2. Why do your end events fire in reversed order, and what bug appears if that order is wrong?
+3. How does your implementation behave on repeated identical stacks or empty stacks?
+4. What is the time complexity, and how would you optimize for very long stacks?
+5. How would you adapt this for noisy sampling where frames can temporarily disappear?
 """
 
 
@@ -1389,6 +1422,18 @@ Implement a same-host crawler first in single-thread mode, then in multi-thread 
 - Same-host filtering
 - Each URL fetched at most once
 - Matching output between single-thread and multi-thread implementations
+
+## Time guidance
+- 10 min: define URL normalization and dedupe rules
+- 35 min: implement single-thread then multi-thread crawler
+- 10 min: run tests and inspect race-condition risks
+
+## Interviewer follow-up questions (prepare answers)
+1. Why did you choose this concurrency model, and where are race conditions prevented?
+2. What guarantees that each URL is fetched at most once under parallel execution?
+3. Why is URL normalization necessary before dedupe, and which canonicalization cases are still missing?
+4. How would you evolve this design for distributed crawling across multiple machines?
+5. If crawl depth exploded, what backpressure or rate-limiting controls would you add first?
 """
 
 
@@ -1597,6 +1642,18 @@ You are given a demo transactional table with duplicates and dirty fields. Build
 - Correct amount/date normalization
 - Invalid-row filtering
 - Correct aggregated metrics
+
+## Time guidance
+- 10 min: identify required cleaning rules and failure cases
+- 35 min: implement SQL extraction plus Python normalization
+- 10 min: run tests and verify metric correctness
+
+## Interviewer follow-up questions (prepare answers)
+1. Why did you split logic between SQL and Python the way you did?
+2. How do you ensure deterministic dedupe when there are ties in `updated_at`?
+3. Which malformed amount/date inputs are still unsupported, and why?
+4. What data-quality metrics would you emit to monitor pipeline health over time?
+5. If dataset size grows 100x, what parts should be pushed down into SQL for performance?
 """
 
 
@@ -1729,6 +1786,18 @@ Implement greedy longest-match tokenization with optional UNK compression.
 - Correct UNK fallback behavior
 - Optional compression of consecutive UNKs
 - Batch wrapper correctness
+
+## Time guidance
+- 10 min: clarify longest-match and UNK compression semantics
+- 35 min: implement tokenizer and batch wrapper
+- 10 min: run tests and reason about corner cases
+
+## Interviewer follow-up questions (prepare answers)
+1. Why is greedy longest match correct for this spec, and when would it be insufficient?
+2. What is the complexity of your implementation, and how would a Trie improve it?
+3. How did you define UNK compression behavior at token boundaries?
+4. What edge cases around case-sensitivity or unicode would change your design?
+5. If this tokenizer were serving production traffic, what profiling signals would you watch first?
 """
 
 
