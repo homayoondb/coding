@@ -3,17 +3,20 @@
 Ranked, Colab-ready mock technical interviews for Anthropic-style prep.
 
 Each `NN_mock.ipynb` is one full timed exam (55 minutes).  
-Each `solNN.ipynb` contains the same exam with a full reference answer.
+Each `NN_sol.ipynb` contains the same exam with a full reference answer.  
+Each `NN_sol.md` contains the step-by-step guide/walkthrough.
 
 ## Structure
 
-- `notebooks/01_mock.ipynb` + `notebooks/sol01.ipynb`
-- `notebooks/02_mock.ipynb` + `notebooks/sol02.ipynb`
-- `notebooks/03_mock.ipynb` + `notebooks/sol03.ipynb`
-- `notebooks/04_mock.ipynb` + `notebooks/sol04.ipynb`
-- `notebooks/05_mock.ipynb` + `notebooks/sol05.ipynb`
-- `notebooks/06_mock.ipynb` + `notebooks/sol06.ipynb`
-- `notebooks/07_mock.ipynb` + `notebooks/sol07.ipynb`
+- `notebooks/01_mock.ipynb` + `notebooks/01_sol.ipynb` + `notebooks/01_sol.md`
+- `notebooks/02_mock.ipynb` + `notebooks/02_sol.ipynb` + `notebooks/02_sol.md`
+- `notebooks/03_mock.ipynb` + `notebooks/03_sol.ipynb` + `notebooks/03_sol.md`
+- `notebooks/04_mock.ipynb` + `notebooks/04_sol.ipynb` + `notebooks/04_sol.md`
+- `notebooks/05_mock.ipynb` + `notebooks/05_sol.ipynb` + `notebooks/05_sol.md`
+- `notebooks/06_mock.ipynb` + `notebooks/06_sol.ipynb` + `notebooks/06_sol.md`
+- `notebooks/07_mock.ipynb` + `notebooks/07_sol.ipynb` + `notebooks/07_sol.md`
+- `notebooks/08_mock.ipynb` + `notebooks/08_sol.ipynb` + `notebooks/08_sol.md`
+- `notebooks/09_mock.ipynb` + `notebooks/09_sol.ipynb` + `notebooks/09_sol.md`
 
 ## Priority Ranking (Most Important First)
 
@@ -24,6 +27,15 @@ Each `solNN.ipynb` contains the same exam with a full reference answer.
 5. `05_mock` Concurrent web crawler (frequently reported practical coding)
 6. `06_mock` SQL + Python extraction/cleaning (applied data task)
 7. `07_mock` Tokenizer longest-match (time-pressure correctness drill)
+8. `08_mock` Exact LC 636 (Exclusive Time of Functions)
+9. `09_mock` Exact LC 609 (Find Duplicate File in System)
+
+## Exact LeetCode Coverage
+
+- `1236. Web Crawler` -> `05_mock` (single-thread crawler)
+- `1242. Web Crawler Multithreaded` -> `05_mock` (multi-thread crawler)
+- `636. Exclusive Time of Functions` -> `08_mock` (exact API and semantics)
+- `609. Find Duplicate File in System` -> `09_mock` (exact parse/grouping API)
 
 ## Recommended Study Modes
 
@@ -36,7 +48,8 @@ Each `solNN.ipynb` contains the same exam with a full reference answer.
 1. Open one `NN_mock.ipynb` in Colab.
 2. Implement all TODO sections.
 3. Run the final test cell.
-4. Only then compare with `solNN.ipynb`.
+4. Only then compare with `NN_sol.ipynb`.
+5. Read `NN_sol.md` for the guided walkthrough.
 
 ## Colab Sync
 

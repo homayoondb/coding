@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import textwrap
 from typing import List
 
@@ -16,6 +17,8 @@ LEGACY_NOTEBOOKS = [
     "mock3_reliability_progressive_questions.ipynb",
     "mock3_reliability_progressive_answers.ipynb",
 ]
+
+OLD_SOLUTION_NOTEBOOKS = [f"sol{i:02d}.ipynb" for i in range(1, 8)]
 
 
 def _lines(src: str) -> List[str]:
@@ -65,6 +68,89 @@ def write_notebook(path: str, cells: list[dict]) -> None:
         f.write("\n")
 
 
+def write_markdown(path: str, content: str) -> None:
+    src = textwrap.dedent(content).strip("\n") + "\n"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(src)
+
+
+def _line_comment(line: str) -> str:
+    stripped = line.strip()
+    if not stripped:
+        return ""
+    if stripped.startswith("#"):
+        return "Existing inline note."
+    if stripped.startswith(("import ", "from ")):
+        return "Import required modules for this solution step."
+    if stripped.startswith("class "):
+        name = stripped.split()[1].split("(")[0].rstrip(":")
+        return f"Define class `{name}` to organize related behavior."
+    if stripped.startswith("def "):
+        m = re.match(r"def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", stripped)
+        fn = m.group(1) if m else "function"
+        return f"Define `{fn}` so this step is reusable and testable."
+    if stripped.startswith("return "):
+        return "Return the computed value for the caller."
+    if stripped == "return":
+        return "Return control to the caller."
+    if stripped.startswith("if "):
+        return "Check this condition to choose the correct branch."
+    if stripped.startswith("elif "):
+        return "Check the next condition if prior branch was not selected."
+    if stripped == "else:":
+        return "Fallback branch when prior conditions are false."
+    if stripped.startswith("for "):
+        return "Iterate through items to process each element deterministically."
+    if stripped.startswith("while "):
+        return "Loop while this condition remains true."
+    if stripped.startswith("with "):
+        return "Use context management for safe setup/cleanup."
+    if stripped == "try:":
+        return "Start guarded block to handle potential runtime errors."
+    if stripped.startswith("except "):
+        return "Handle expected failure path and keep behavior predictable."
+    if stripped == "finally:":
+        return "Always run this cleanup step."
+    if stripped.startswith("raise "):
+        return "Raise explicit error to fail fast on invalid state."
+    if stripped.startswith("assert "):
+        return "Assert expected behavior to validate correctness."
+    if "=" in stripped and "==" not in stripped and "!=" not in stripped and "<=" not in stripped and ">=" not in stripped:
+        return "Assign computed data to a named variable for later use."
+    if stripped.endswith("):"):
+        return "Start a new block and continue with indented logic."
+    if stripped.endswith(")"):
+        return "Call this function to perform the next operation."
+    return "Execute this line as part of the solution flow."
+
+
+def _annotate_python_source(src: str, chunk_note: str) -> str:
+    lines = textwrap.dedent(src).splitlines()
+    out: list[str] = []
+    out.append(f"# Chunk overview: {chunk_note}")
+    out.append("# Why this chunk exists: it makes the solution easier to reason about under interview time pressure.")
+    for raw in lines:
+        if not raw.strip():
+            out.append("")
+            continue
+        indent = re.match(r"^\s*", raw).group(0)
+        comment = _line_comment(raw)
+        if comment:
+            out.append(f"{indent}# {comment}")
+        out.append(raw)
+    return "\n".join(out).rstrip() + "\n"
+
+
+def _annotate_solution_cell(cell: dict, chunk_note: str) -> dict:
+    if cell.get("cell_type") != "code":
+        return cell
+    src = "".join(cell.get("source", []))
+    annotated = _annotate_python_source(src, chunk_note)
+    clone = dict(cell)
+    clone["source"] = _lines(annotated)
+    return clone
+
+
 def write_exam_pair(
     exam_num: int,
     title: str,
@@ -91,7 +177,7 @@ Run this final test cell after implementing all TODO sections.
     answer_cells = [
         md(
             f"""
-# sol{exam_id}: {title}
+# {exam_id}_sol: {title}
 
 Contains:
 - the same scenario as `{exam_id}_mock`
@@ -99,17 +185,29 @@ Contains:
 - grading tests
 """
         ),
-        setup_cell,
-        answer_logic_cell,
-        tests_cell,
-        md(solution_walkthrough),
+        _annotate_solution_cell(setup_cell, "Prepare imports, fixtures, and helper scaffolding used by the solution."),
+        _annotate_solution_cell(answer_logic_cell, "Implement the final reference solution in a clean, stepwise way."),
+        _annotate_solution_cell(tests_cell, "Run checks that prove the implementation meets the problem contract."),
     ]
     write_notebook(os.path.join(NB_DIR, f"{exam_id}_mock.ipynb"), question_cells)
-    write_notebook(os.path.join(NB_DIR, f"sol{exam_id}.ipynb"), answer_cells)
+    write_notebook(os.path.join(NB_DIR, f"{exam_id}_sol.ipynb"), answer_cells)
+    write_markdown(
+        os.path.join(NB_DIR, f"{exam_id}_sol.md"),
+        f"""
+# {exam_id}_sol Guide: {title}
+
+{solution_walkthrough}
+""",
+    )
 
 
 def remove_legacy_notebooks() -> None:
     for name in LEGACY_NOTEBOOKS:
+        path = os.path.join(NB_DIR, name)
+        if os.path.exists(path):
+            os.remove(path)
+
+    for name in OLD_SOLUTION_NOTEBOOKS:
         path = os.path.join(NB_DIR, name)
         if os.path.exists(path):
             os.remove(path)
@@ -1802,6 +1900,257 @@ Implement greedy longest-match tokenization with optional UNK compression.
 5. If this tokenizer were serving production traffic, what profiling signals would you watch first?
 """
 
+# ---------------------------
+# Exam 08: LC 636 Exclusive Time of Functions
+# ---------------------------
+exam08_setup = code(
+    '''
+from typing import Any
+'''
+)
+
+exam08_question_logic = code(
+    '''
+def exclusive_time(n: int, logs: list[str]) -> list[int]:
+    """
+    LeetCode 636 exact API:
+    - n function ids: [0..n-1]
+    - logs format: "{fid}:start:{ts}" or "{fid}:end:{ts}"
+    - end timestamp is inclusive
+    """
+    # TODO
+    raise NotImplementedError
+'''
+)
+
+exam08_answer_logic = code(
+    '''
+def exclusive_time(n: int, logs: list[str]) -> list[int]:
+    if n <= 0:
+        raise ValueError("n_must_be_positive")
+
+    result = [0] * n
+    stack: list[int] = []
+    prev_time = 0
+
+    for raw in logs:
+        parts = raw.split(":")
+        if len(parts) != 3:
+            raise ValueError("invalid_log_format")
+        fid_s, action, ts_s = parts
+        fid = int(fid_s)
+        ts = int(ts_s)
+        if fid < 0 or fid >= n:
+            raise ValueError("function_id_out_of_range")
+        if action not in {"start", "end"}:
+            raise ValueError("invalid_log_action")
+
+        if action == "start":
+            if stack:
+                result[stack[-1]] += ts - prev_time
+            stack.append(fid)
+            prev_time = ts
+            continue
+
+        if not stack or stack[-1] != fid:
+            raise ValueError("unmatched_end_event")
+        result[stack.pop()] += ts - prev_time + 1
+        prev_time = ts + 1
+
+    if stack:
+        raise ValueError("unterminated_start_event")
+    return result
+'''
+)
+
+exam08_tests = code(
+    '''
+def run_exam08_tests() -> None:
+    # LeetCode canonical sample
+    n = 2
+    logs = ["0:start:0", "1:start:2", "1:end:5", "0:end:6"]
+    assert exclusive_time(n, logs) == [3, 4]
+
+    # Single function, one tick
+    assert exclusive_time(1, ["0:start:0", "0:end:0"]) == [1]
+
+    # Sequential (non-nested) calls
+    assert exclusive_time(2, ["0:start:0", "0:end:0", "1:start:1", "1:end:1"]) == [1, 1]
+
+    # Another nested example
+    assert exclusive_time(1, ["0:start:0", "0:start:2", "0:end:5", "0:end:6"]) == [7]
+
+    # Invalid: unmatched end
+    try:
+        exclusive_time(1, ["0:end:0"])
+        raise AssertionError("Expected unmatched_end_event")
+    except ValueError as exc:
+        assert "unmatched_end_event" in str(exc)
+
+    print("08_mock tests passed")
+
+
+run_exam08_tests()
+'''
+)
+
+exam08_intro = """
+# 08_mock: LeetCode 636 (Exclusive Time of Functions)
+
+Timebox: **55 minutes**  
+Language: **Python (Colab)**
+
+This is an exact-practice version of LC 636.
+
+## Scenario
+Implement `exclusive_time(n, logs)` with inclusive end timestamp semantics.
+
+## What to implement
+1. `exclusive_time`
+
+## Completion criteria (required)
+- Correct handling of nested calls via stack
+- Correct inclusive end handling (`+1` on end events)
+- Correct carry-over of `prev_time`
+- Deterministic validation of malformed event streams
+
+## Time guidance
+- 8 min: decode log semantics and write invariants
+- 35 min: implement stack logic and edge handling
+- 12 min: run tests and manually trace one sample
+
+## Interviewer follow-up questions (prepare answers)
+1. Why do we add `+1` when processing end events?
+2. Why update `prev_time` to `ts + 1` after an end?
+3. What breaks if nested calls are not tracked with a stack?
+4. How would you adapt this if timestamps were not integer ticks?
+5. Which invalid log orders do you reject, and why?
+"""
+
+
+# ---------------------------
+# Exam 09: LC 609 Find Duplicate File in System
+# ---------------------------
+exam09_setup = code(
+    '''
+from collections import defaultdict
+'''
+)
+
+exam09_question_logic = code(
+    '''
+def find_duplicate(paths: list[str]) -> list[list[str]]:
+    """
+    LeetCode 609 exact API:
+    Input entries like:
+      "root/a 1.txt(abcd) 2.txt(efgh)"
+    Return groups of duplicate file paths (same content), groups size >= 2.
+    """
+    # TODO
+    raise NotImplementedError
+'''
+)
+
+exam09_answer_logic = code(
+    '''
+def find_duplicate(paths: list[str]) -> list[list[str]]:
+    content_to_files: defaultdict[str, list[str]] = defaultdict(list)
+
+    for row in paths:
+        parts = row.split(" ")
+        if not parts:
+            continue
+        root = parts[0]
+        for token in parts[1:]:
+            if "(" not in token or not token.endswith(")"):
+                raise ValueError("invalid_file_token")
+            name, content_part = token.split("(", 1)
+            content = content_part[:-1]
+            full_path = f"{root}/{name}"
+            content_to_files[content].append(full_path)
+
+    groups = [sorted(files) for files in content_to_files.values() if len(files) > 1]
+    return sorted(groups, key=lambda g: g[0])
+'''
+)
+
+exam09_tests = code(
+    '''
+def run_exam09_tests() -> None:
+    # LeetCode canonical sample
+    rows = [
+        "root/a 1.txt(abcd) 2.txt(efgh)",
+        "root/c 3.txt(abcd)",
+        "root/c/d 4.txt(efgh)",
+        "root 4.txt(efgh)",
+    ]
+    out = find_duplicate(rows)
+    assert out == [
+        ["root/4.txt", "root/a/2.txt", "root/c/d/4.txt"],
+        ["root/a/1.txt", "root/c/3.txt"],
+    ]
+
+    # No duplicates
+    assert find_duplicate(["r/a 1.txt(x) 2.txt(y)"]) == []
+
+    # Multiple duplicate groups
+    rows = [
+        "u/x 1.txt(m) 2.txt(n)",
+        "u/y 3.txt(m) 4.txt(z)",
+        "u/z 5.txt(n)",
+    ]
+    assert find_duplicate(rows) == [
+        ["u/x/1.txt", "u/y/3.txt"],
+        ["u/x/2.txt", "u/z/5.txt"],
+    ]
+
+    # Invalid token
+    try:
+        find_duplicate(["u/a bad_token"])
+        raise AssertionError("Expected invalid_file_token")
+    except ValueError as exc:
+        assert "invalid_file_token" in str(exc)
+
+    print("09_mock tests passed")
+
+
+run_exam09_tests()
+'''
+)
+
+exam09_intro = """
+# 09_mock: LeetCode 609 (Find Duplicate File in System)
+
+Timebox: **55 minutes**  
+Language: **Python (Colab)**
+
+This is an exact-practice version of LC 609.
+
+## Scenario
+Parse directory rows and group files by identical content.
+
+## What to implement
+1. `find_duplicate`
+
+## Completion criteria (required)
+- Correct parsing of `name(content)` tokens
+- Correct full-path construction using root dir
+- Return only groups with duplicate content (size >= 2)
+- Deterministic output for testability
+
+## Time guidance
+- 8 min: parse format and define output contract
+- 35 min: implement parse + grouping
+- 12 min: run tests and manually verify one grouped output
+
+## Interviewer follow-up questions (prepare answers)
+1. Why use content -> files mapping instead of pairwise comparison?
+2. How does complexity scale with many files and long content strings?
+3. How would this change if content had to be hashed from real file bytes?
+4. How would you stream this for large datasets?
+5. Which malformed row/token cases should fail fast?
+"""
+
 exam01_walkthrough = """
 ## Walkthrough: Exactly How to Solve `01_mock`
 
@@ -2092,6 +2441,89 @@ Yes:
 - Is batch wrapper behavior identical to single-string behavior?
 """
 
+exam08_walkthrough = """
+## Walkthrough: Exactly How to Solve `08_mock` (LC 636)
+
+### 0) First 2 minutes
+- Write these invariants first:
+  - stack top = currently running function
+  - `prev_time` = first unaccounted timestamp
+  - end event is inclusive
+
+### 1) Should I read tests now?
+Yes:
+- Confirm canonical sample expected `[3,4]`.
+- Confirm nested case and single-tick case.
+- Confirm invalid unmatched end should raise error.
+
+### 2) Coding order
+1. Parse log triplets (`fid:action:ts`) and validate.
+2. Start event: credit current top function with `ts - prev_time`.
+3. Push new function and set `prev_time = ts`.
+4. End event: credit top function with `ts - prev_time + 1`.
+5. Pop and set `prev_time = ts + 1`.
+
+### 3) One concrete example to narrate aloud
+For `0:start:0, 1:start:2, 1:end:5, 0:end:6`:
+- function 0 gets `2` units before function 1 starts
+- function 1 gets `4` units (`2..5` inclusive)
+- function 0 gets final `1` unit (`6..6`)
+- total `[3,4]`
+
+### 4) What to say while coding
+- \"I am using a stack because nesting depth changes over time.\"
+- \"I track `prev_time` so every tick is counted exactly once.\"
+- \"Inclusive end means I add `+1` and then move `prev_time` to `ts+1`.\"
+
+### 5) Self-check before final run
+- Do I double-count any time interval?
+- Did I handle inclusive end correctly?
+- Do malformed sequences fail explicitly?
+"""
+
+exam09_walkthrough = """
+## Walkthrough: Exactly How to Solve `09_mock` (LC 609)
+
+### 0) First 2 minutes
+- Write parse contract:
+  - first token is root
+  - others are `name(content)`
+- Write grouping contract:
+  - key by content
+  - keep groups with size >= 2
+
+### 1) Should I read tests now?
+Yes:
+- Confirm canonical sample groups.
+- Confirm no-duplicate input returns `[]`.
+- Confirm malformed token should raise error.
+
+### 2) Coding order
+1. Loop rows -> split by spaces.
+2. Extract `root`.
+3. Parse each file token into `name` + `content`.
+4. Build full path `root/name`.
+5. Append into `content_to_files[content]`.
+6. Filter and sort groups for deterministic tests.
+
+### 3) One concrete example to narrate aloud
+Row: `root/a 1.txt(abcd) 2.txt(efgh)`:
+- parse root as `root/a`
+- add `root/a/1.txt` under content `abcd`
+- add `root/a/2.txt` under content `efgh`
+Later rows with same content join same bucket.
+
+### 4) What to say while coding
+- \"I map content to file paths to avoid O(n^2) comparisons.\"
+- \"I return only buckets with duplicates.\"
+- \"I sort for deterministic testing; original problem allows any order.\"
+
+### 5) Self-check before final run
+- Are full paths constructed correctly?
+- Do singleton groups get excluded?
+- Do malformed file tokens fail fast?
+"""
+
 
 def main() -> None:
     write_exam_pair(
@@ -2163,6 +2595,26 @@ def main() -> None:
         answer_logic_cell=exam07_answer_logic,
         tests_cell=exam07_tests,
         solution_walkthrough=exam07_walkthrough,
+    )
+    write_exam_pair(
+        exam_num=8,
+        title="LeetCode 636 Exclusive Time of Functions",
+        question_intro=exam08_intro,
+        setup_cell=exam08_setup,
+        question_logic_cell=exam08_question_logic,
+        answer_logic_cell=exam08_answer_logic,
+        tests_cell=exam08_tests,
+        solution_walkthrough=exam08_walkthrough,
+    )
+    write_exam_pair(
+        exam_num=9,
+        title="LeetCode 609 Find Duplicate File in System",
+        question_intro=exam09_intro,
+        setup_cell=exam09_setup,
+        question_logic_cell=exam09_question_logic,
+        answer_logic_cell=exam09_answer_logic,
+        tests_cell=exam09_tests,
+        solution_walkthrough=exam09_walkthrough,
     )
 
     remove_legacy_notebooks()

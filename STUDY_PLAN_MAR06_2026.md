@@ -19,7 +19,9 @@ For this task, "implement" means following the study schedule yourself. There is
 9. `notebooks/06_mock.ipynb`
 10. `notebooks/05_mock.ipynb`
 11. `notebooks/07_mock.ipynb`
-12. `building_effective_agents_course/03_Mastering Agentic Patterns with Claude in Python/` and `building_effective_agents_course/04_Parallelizing Claude Agentic Systems in Python/` (only if extra time)
+12. `notebooks/08_mock.ipynb` (exact LC 636)
+13. `notebooks/09_mock.ipynb` (exact LC 609)
+14. `building_effective_agents_course/03_Mastering Agentic Patterns with Claude in Python/` and `building_effective_agents_course/04_Parallelizing Claude Agentic Systems in Python/` (only if extra time)
 
 ## Why this order
 
@@ -34,7 +36,7 @@ For this task, "implement" means following the study schedule yourself. There is
 ### If you only have 1 focused day
 
 1. Run `01_mock` (strict 55-minute timer)
-2. Review `sol01` and rewrite key functions from memory
+2. Review `01_sol.ipynb` and `01_sol.md`, then rewrite key functions from memory
 3. Read tool-use + stop-reasons docs
 4. Run `02_mock` (strict 55-minute timer)
 5. Do 30-minute verbal drill on trade-offs and failure modes
@@ -57,8 +59,9 @@ For this task, "implement" means following the study schedule yourself. There is
 
 1. Everything from 3-day track
 2. Run `06_mock`, then `05_mock`, then `07_mock`
-3. Skim module 01 lessons (routing/chaining/parallel basics)
-4. Only if time remains, skim modules 03-04
+3. If LeetCode coverage is needed, run `08_mock`, then `09_mock`
+4. Skim module 01 lessons (routing/chaining/parallel basics)
+5. Only if time remains, skim modules 03-04
 
 ## Daily Session Template
 
