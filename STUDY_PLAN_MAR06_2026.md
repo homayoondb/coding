@@ -1,109 +1,150 @@
-# Anthropic Coding Interview Study Plan
+# Anthropic 55-Minute Coding Study Plan (CV-Tailored)
 
-Interview target date: Friday, March 6, 2026  
-Prep window: Sunday to Thursday, with 2-3 work-heavy days
+Interview target: Friday, March 6, 2026  
+Available prep: Sunday-Thursday, with 2-3 work-heavy days
 
-## What "implement the plan" means
-For this task, "implement" means following the study schedule yourself. There is no code feature to build.
+## What this plan optimizes for
+This plan is tuned to your submitted Anthropic profile (FDE/SA style):
+- production agent systems
+- reliability + safety guardrails
+- enterprise deployment patterns
+- Python-first applied problem solving
 
-## Priority Ranking (Most Important First)
+That means we prioritize interview prompts that look like real deployment engineering, not only generic algorithm puzzles.
 
-1. `notebooks/01_mock.ipynb`
-2. `https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use` and `https://docs.anthropic.com/en/api/handling-stop-reasons`
+## Most likely interviewer pick (based on your CV)
+
+1. Reliability triage loop with retries/cache/structured output
+2. Tool-use loop correctness with robust error handling
+3. Safety/guardrail handling of untrusted tool output
+4. Applied data cleaning + metric extraction (SQL + Python)
+5. Practical trace/event reconstruction from runtime samples
+
+This maps to your strongest resume signals: agent deployment, guardrails/evals, production reliability, and customer-facing technical implementation.
+
+## CV-Matched Resource Ranking (Most Important First)
+
+1. `notebooks/03_mock.ipynb`
+2. `notebooks/01_mock.ipynb`
 3. `notebooks/02_mock.ipynb`
-4. `notebooks/03_mock.ipynb`
-5. `building_effective_agents_course/02_Developing Claude Agents with Tool Integration in Python/`
-6. `notebooks/04_mock.ipynb`
-7. `https://support.codesignal.com/hc/en-us/articles/19116922232983-What-are-the-Industry-Coding-Assessment-ICA-rules` and `https://support.codesignal.com/hc/en-us/articles/21025134150423-How-do-I-practice-coding-questions-on-CodeSignal`
-8. `building_effective_agents_course/01_Exploring Workflows with Claude in Python/` (selective)
-9. `notebooks/06_mock.ipynb`
-10. `notebooks/05_mock.ipynb`
-11. `notebooks/07_mock.ipynb`
-12. `notebooks/08_mock.ipynb` (exact LC 636)
-13. `notebooks/09_mock.ipynb` (exact LC 609)
-14. `building_effective_agents_course/03_Mastering Agentic Patterns with Claude in Python/` and `building_effective_agents_course/04_Parallelizing Claude Agentic Systems in Python/` (only if extra time)
+4. `notebooks/06_mock.ipynb`
+5. `notebooks/04_mock.ipynb`
+6. `https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use`
+7. `https://docs.anthropic.com/en/api/handling-stop-reasons`
+8. `building_effective_agents_course/02_Developing Claude Agents with Tool Integration in Python/`
+9. `notebooks/05_mock.ipynb`
+10. `notebooks/08_mock.ipynb` (exact LC636)
+11. `notebooks/09_mock.ipynb` (exact LC609)
+12. `notebooks/07_mock.ipynb`
+13. `building_effective_agents_course/01_Exploring Workflows with Claude in Python/` (selective)
+14. `https://support.codesignal.com/hc/en-us/articles/19116922232983-What-are-the-Industry-Coding-Assessment-ICA-rules`
+15. `https://support.codesignal.com/hc/en-us/articles/21025134150423-How-do-I-practice-coding-questions-on-CodeSignal`
+16. `building_effective_agents_course/03_Mastering Agentic Patterns with Claude in Python/` and `building_effective_agents_course/04_Parallelizing Claude Agentic Systems in Python/` (only if extra time)
 
-## Why this order
+## Why this ranking changed
 
-- Your recruiter-described round is a 55-minute practical coding interview around tool use + agents.
-- `01-03_mock` are the closest simulation of that shape and include follow-up questions.
-- `04_mock` is high value because stack-sample/event-style practical prompts are repeatedly reported.
-- Course module 02 is the most directly relevant part of the downloaded course.
-- Multi-agent orchestration and async modules are useful but lower ROI for a single 55-minute round.
+- Your prior rank weighted interview-general signal heavily.
+- This revised rank weights **CV-match likelihood** first.
+- For your background, a practical reliability/agent/safety problem is more likely than a pure tokenizer-style prompt.
 
-## Time-Boxed Tracks
+## Exact mock set now available
 
-### If you only have 1 focused day
+- `01_mock.ipynb` + `01_sol.ipynb` + `01_sol.md`
+- `02_mock.ipynb` + `02_sol.ipynb` + `02_sol.md`
+- `03_mock.ipynb` + `03_sol.ipynb` + `03_sol.md`
+- `04_mock.ipynb` + `04_sol.ipynb` + `04_sol.md`
+- `05_mock.ipynb` + `05_sol.ipynb` + `05_sol.md`
+- `06_mock.ipynb` + `06_sol.ipynb` + `06_sol.md`
+- `07_mock.ipynb` + `07_sol.ipynb` + `07_sol.md`
+- `08_mock.ipynb` + `08_sol.ipynb` + `08_sol.md`
+- `09_mock.ipynb` + `09_sol.ipynb` + `09_sol.md`
 
-1. Run `01_mock` (strict 55-minute timer)
-2. Review `01_sol.ipynb` and `01_sol.md`, then rewrite key functions from memory
-3. Read tool-use + stop-reasons docs
-4. Run `02_mock` (strict 55-minute timer)
-5. Do 30-minute verbal drill on trade-offs and failure modes
+## Day-by-Day Execution Plan
 
-### If you have 2 focused days
+### Day 1 (High-value core)
+1. Timed run: `03_mock` (55 min)
+2. Debrief: compare with `03_sol.ipynb`
+3. Study guide: `03_sol.md`
+4. 30-min rewrite from blank (no copy/paste)
 
-1. Everything from 1-day track
-2. Run `03_mock`
-3. Do only module 02 lessons from `building_effective_agents_course`
-4. Re-implement a minimal `run_agent` loop from blank cell in <=35 minutes
+### Day 2 (Tool loop + safety)
+1. Timed run: `01_mock`
+2. Debrief with `01_sol.ipynb` and `01_sol.md`
+3. Timed run: `02_mock`
+4. Debrief with `02_sol.ipynb` and `02_sol.md`
 
-### If you have 3 focused days
+### Day 3 (Applied practical coding)
+1. Timed run: `06_mock`
+2. Timed run: `04_mock`
+3. 20-minute verbal defense rehearsal for both
 
-1. Everything from 2-day track
-2. Run `04_mock`
-3. Read CodeSignal ICA rules and do one practice session
-4. Do one interview-style follow-up Q&A rehearsal
+### Day 4 (Role breadth + backup patterns)
+1. Read docs: tool use implementation + stop reasons
+2. Do selected lessons from course module 02
+3. One timed run: `05_mock` or `08_mock` (choose based on weak area)
 
-### If you can use the full 5 days
+### Day 5 (Final rehearsal)
+1. One full timed run from top-5 list, no interruptions
+2. 45-minute speaking rehearsal (trade-offs, failure modes, alternatives)
+3. Light review of mistakes only (no new topics)
 
-1. Everything from 3-day track
-2. Run `06_mock`, then `05_mock`, then `07_mock`
-3. If LeetCode coverage is needed, run `08_mock`, then `09_mock`
-4. Skim module 01 lessons (routing/chaining/parallel basics)
-5. Only if time remains, skim modules 03-04
+## If time collapses
 
-## Daily Session Template
+### Only 1 focused day remains
+1. `03_mock`
+2. `01_mock`
+3. Docs: tool-use + stop-reasons
+4. 30-minute communication rehearsal
 
-- Deep day: 1 timed mock + 60 minutes debrief + 30 minutes verbal defense
-- Light day: 45-75 minutes docs/course + 30 minutes coding warm-up
-- Final day before interview: 1 timed mock + follow-up Q&A rehearsal
+### Only 2 focused days remain
+1. Day 1: `03_mock` + `01_mock`
+2. Day 2: `02_mock` + `06_mock`
 
-## Interview Behaviors to Practice (Not Just Passing Tests)
+### Only 3 focused days remain
+1. Day 1: `03_mock` + `01_mock`
+2. Day 2: `02_mock` + `06_mock`
+3. Day 3: `04_mock` + final rehearsal
 
-1. State assumptions early
-2. Build minimal correct solution first
-3. Handle invalid inputs and runtime failures explicitly
-4. Explain trade-offs between speed, robustness, and clarity
-5. Call out what you would improve in production
+## Session format (for every timed mock)
 
-## Verbal Script During Coding
+1. 8-10 min: parse prompt + tests + write invariants
+2. 30-35 min: implement TODOs in dependency order
+3. 10 min: edge-case pass + clear explanation pass
 
-1. "I will optimize for correctness first, then reliability."
-2. "I am implementing minimal working behavior, then extending safely."
-3. "These are the failure modes I am covering: invalid args, tool errors, loop limits."
-4. "Trade-off: I choose X over Y because of time and risk constraints."
-5. "I will validate with targeted tests before refactoring."
+## Speaking script during coding
 
-## Readiness Checklist
+Use this structure out loud:
 
-- [ ] Can implement tool loop (`tool_use` -> execute -> `tool_result`) from scratch in <=35 minutes
-- [ ] Can explain at least two stop reasons and how your loop handles them
-- [ ] Can pass `01_mock`, `02_mock`, and `03_mock` under 55-minute timebox
-- [ ] Can answer at least 3 follow-up questions per mock without notes
-- [ ] Can clearly explain one trade-off and one failure mode per solution
+1. "I’ll lock the contract from tests first, then implement minimal correct behavior."
+2. "I’m implementing in dependency order: validator/helper first, loop/orchestration last."
+3. "Failure modes I’m explicitly handling are invalid input, runtime tool errors, and loop safety."
+4. "Trade-off: I choose clarity and deterministic behavior over extra features in this timebox."
+5. "If this were production, next step is observability and tighter schema validation."
 
-## Key Links
+## Self-questions to ask while solving
 
-- Anthropic careers: https://www.anthropic.com/careers
-- Candidate AI guidance: https://www.anthropic.com/candidate-ai-guidance
-- Tool use overview: https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview
-- Implement tool use: https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use
-- Stop reasons: https://docs.anthropic.com/en/api/handling-stop-reasons
-- CodeSignal ICA rules: https://support.codesignal.com/hc/en-us/articles/19116922232983-What-are-the-Industry-Coding-Assessment-ICA-rules
-- CodeSignal practice: https://support.codesignal.com/hc/en-us/articles/21025134150423-How-do-I-practice-coding-questions-on-CodeSignal
-- Course page: https://codesignal.com/learn/paths/building-effective-agents-claude-python
+1. What is the exact output contract the tests enforce?
+2. Which path fails first under malformed input?
+3. Can this loop or workflow get stuck?
+4. What is my deterministic tie-break behavior?
+5. Am I handling both happy path and recovery path?
 
-## Notes on AI Assistance During Interview
+## Readiness gates (must all be true)
 
-Your recruiter said an assistant may be available. Confirm exact allowed usage before interview day. Use any assistant only for syntax/boilerplate and keep architecture, logic, and trade-off reasoning fully your own.
+- [ ] Can complete `03_mock` under 55 minutes with clean explanation
+- [ ] Can complete `01_mock` under 55 minutes and explain stop-reason handling
+- [ ] Can complete `02_mock` under 55 minutes and explain trust boundary design
+- [ ] Can explain one reliability trade-off and one safety trade-off without notes
+- [ ] Can describe one concrete production hardening step for every top-5 mock
+
+## LeetCode exact coverage status
+
+- `1236 Web Crawler` -> covered by `05_mock`
+- `1242 Web Crawler Multithreaded` -> covered by `05_mock`
+- `636 Exclusive Time of Functions` -> covered by `08_mock`
+- `609 Find Duplicate File in System` -> covered by `09_mock`
+
+## Notes
+
+- Keep using `NN_sol.ipynb` for reference implementation and `NN_sol.md` for guided walkthrough.
+- If recruiter confirms assistant usage rules, align your practice mode to those constraints.
