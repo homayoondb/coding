@@ -1,43 +1,40 @@
-# 09_sol Guide: LeetCode 609 Find Duplicate File in System
+# 09_sol Guide: LeetCode 636 Exclusive Time of Functions
 
 
-## Walkthrough: Exactly How to Solve `09_mock` (LC 609)
+## Walkthrough: Exactly How to Solve `09_mock` (LC 636)
 
 ### 0) First 2 minutes
-- Write parse contract:
-  - first token is root
-  - others are `name(content)`
-- Write grouping contract:
-  - key by content
-  - keep groups with size >= 2
+- Write these invariants first:
+  - stack top = currently running function
+  - `prev_time` = first unaccounted timestamp
+  - end event is inclusive
 
 ### 1) Should I read tests now?
 Yes:
-- Confirm canonical sample groups.
-- Confirm no-duplicate input returns `[]`.
-- Confirm malformed token should raise error.
+- Confirm canonical sample expected `[3,4]`.
+- Confirm nested case and single-tick case.
+- Confirm invalid unmatched end should raise error.
 
 ### 2) Coding order
-1. Loop rows -> split by spaces.
-2. Extract `root`.
-3. Parse each file token into `name` + `content`.
-4. Build full path `root/name`.
-5. Append into `content_to_files[content]`.
-6. Filter and sort groups for deterministic tests.
+1. Parse log triplets (`fid:action:ts`) and validate.
+2. Start event: credit current top function with `ts - prev_time`.
+3. Push new function and set `prev_time = ts`.
+4. End event: credit top function with `ts - prev_time + 1`.
+5. Pop and set `prev_time = ts + 1`.
 
 ### 3) One concrete example to narrate aloud
-Row: `root/a 1.txt(abcd) 2.txt(efgh)`:
-- parse root as `root/a`
-- add `root/a/1.txt` under content `abcd`
-- add `root/a/2.txt` under content `efgh`
-Later rows with same content join same bucket.
+For `0:start:0, 1:start:2, 1:end:5, 0:end:6`:
+- function 0 gets `2` units before function 1 starts
+- function 1 gets `4` units (`2..5` inclusive)
+- function 0 gets final `1` unit (`6..6`)
+- total `[3,4]`
 
 ### 4) What to say while coding
-- "I map content to file paths to avoid O(n^2) comparisons."
-- "I return only buckets with duplicates."
-- "I sort for deterministic testing; original problem allows any order."
+- "I am using a stack because nesting depth changes over time."
+- "I track `prev_time` so every tick is counted exactly once."
+- "Inclusive end means I add `+1` and then move `prev_time` to `ts+1`."
 
 ### 5) Self-check before final run
-- Are full paths constructed correctly?
-- Do singleton groups get excluded?
-- Do malformed file tokens fail fast?
+- Do I double-count any time interval?
+- Did I handle inclusive end correctly?
+- Do malformed sequences fail explicitly?

@@ -6,6 +6,9 @@ Each `NN_mock.ipynb` is one full timed exam (55 minutes).
 Each `NN_sol.ipynb` contains the same exam with a full reference answer.  
 Each `NN_sol.md` contains the step-by-step guide/walkthrough.
 
+`01_mock` to `03_mock` now mirror Claude Messages API tool sequencing:
+assistant `tool_use` content blocks must be followed by a user message containing `tool_result` blocks.
+
 ## Structure
 
 - `notebooks/01_mock.ipynb` + `notebooks/01_sol.ipynb` + `notebooks/01_sol.md`
@@ -17,30 +20,32 @@ Each `NN_sol.md` contains the step-by-step guide/walkthrough.
 - `notebooks/07_mock.ipynb` + `notebooks/07_sol.ipynb` + `notebooks/07_sol.md`
 - `notebooks/08_mock.ipynb` + `notebooks/08_sol.ipynb` + `notebooks/08_sol.md`
 - `notebooks/09_mock.ipynb` + `notebooks/09_sol.ipynb` + `notebooks/09_sol.md`
+- `notebooks/10_mock.ipynb` + `notebooks/10_sol.ipynb` + `notebooks/10_sol.md`
 
 ## Priority Ranking (Most Important First)
 
-1. `01_mock` Tool-use loop correctness (closest to stated interview shape)
-2. `02_mock` Tool safety + prompt-injection defense
+1. `01_mock` Hybrid of recruiter-email shape + progressive stage-gating + banking-style business logic
+2. `02_mock` Prompt + tool-use loop correctness (closest to stated interview shape)
 3. `03_mock` Reliability loop (retry/cache/structured output)
-4. `04_mock` Stack samples to trace events (practical Colab coding pattern)
-5. `05_mock` Concurrent web crawler (frequently reported practical coding)
-6. `06_mock` SQL + Python extraction/cleaning (applied data task)
-7. `07_mock` Tokenizer longest-match (time-pressure correctness drill)
-8. `08_mock` Exact LC 636 (Exclusive Time of Functions)
-9. `09_mock` Exact LC 609 (Find Duplicate File in System)
+4. `04_mock` Tool safety + prompt-injection defense
+5. `05_mock` Stack samples to trace events (practical Colab coding pattern)
+6. `06_mock` Concurrent web crawler (frequently reported practical coding)
+7. `07_mock` SQL + Python extraction/cleaning (applied data task)
+8. `08_mock` Tokenizer longest-match (time-pressure correctness drill)
+9. `09_mock` Exact LC 636 (Exclusive Time of Functions)
+10. `10_mock` Exact LC 609 (Find Duplicate File in System)
 
 ## Exact LeetCode Coverage
 
-- `1236. Web Crawler` -> `05_mock` (single-thread crawler)
-- `1242. Web Crawler Multithreaded` -> `05_mock` (multi-thread crawler)
-- `636. Exclusive Time of Functions` -> `08_mock` (exact API and semantics)
-- `609. Find Duplicate File in System` -> `09_mock` (exact parse/grouping API)
+- `1236. Web Crawler` -> `06_mock` (single-thread crawler)
+- `1242. Web Crawler Multithreaded` -> `06_mock` (multi-thread crawler)
+- `636. Exclusive Time of Functions` -> `09_mock` (exact API and semantics)
+- `609. Find Duplicate File in System` -> `10_mock` (exact parse/grouping API)
 
 ## Recommended Study Modes
 
-- **Core-only mode (high relevance):** `01_mock` -> `02_mock` -> `03_mock`
-- **Complete mode:** run all 7 in ranked order
+- **Core-only mode (highest relevance):** `01_mock` -> `02_mock` -> `03_mock`
+- **Complete mode:** run all 10 in ranked order
 - **Exam simulation:** one notebook per day, strict 55-minute timer, no answer notebook until after tests
 
 ## How To Run

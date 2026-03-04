@@ -1,56 +1,42 @@
-# 01_sol Guide: Tool-Using Support Agent
-
-
 ## Walkthrough: Exactly How to Solve `01_mock`
 
-### 0) First 2 minutes (do this before coding)
-- Read function TODOs and write this mini-plan in comments:
-  1. `validate_tool_call`
-  2. `execute_tool_call`
-  3. `run_agent`
-- Do **not** start `run_agent` first.
+### 0) First 3 minutes: lock stage contracts
+- Read level checks first, not function bodies.
+- Capture stage contracts quickly:
+  - L1: schema + single tool call.
+  - L2: multiple tool calls in one turn and strict message ordering.
+  - L3: business-logic mutation + recoverable tool errors.
+  - L4: `pause_turn`, one retry on runtime fault, max-step guard.
 
-### 1) Should I read tests now?
-Yes, but fast:
-- Spend 3-4 minutes scanning test names and assertions only.
-- Extract contracts from tests:
-  - Single and multiple tool calls must work.
-  - Missing args and runtime failures must return `is_error=True`.
-  - `max_steps` must raise `RuntimeError("max_steps_exceeded")`.
-- Then stop reading tests and implement TODOs.
+### 1) Implementation order
+1. `build_tool_schemas`
+2. `build_system_prompt`
+3. `_validate_tool_call` (inside solution)
+4. `execute_tool_call`
+5. `run_agent`
 
-### 2) Coding order with checkpoints
-1. `validate_tool_call`:
-   - check required keys (`id`, `name`, `input`)
-   - check tool exists
-   - check `input` is dict
-   - check required args from function signature
-2. `execute_tool_call`:
-   - call validator first
-   - on validation/runtime error return tool message with `is_error=True`
-   - on success return tool message with JSON result payload
-3. `run_agent`:
-   - initialize `messages=[{"role":"user", ...}]`
-   - loop up to `max_steps`
-   - if `tool_use`: execute **all** tool calls, append messages, continue
-   - if `end_turn`: return final text + messages
-   - else: unsupported stop reason error
+Do not start with the full loop first.
 
-### 3) One concrete example to narrate aloud
-Use test case #2 (multiple tools):
-- Model returns `policy_check` and `create_refund` in one turn.
-- You execute both and append two tool messages.
-- Next model turn ends with "Refund submitted."
-- Why this matters: proves your loop handles batched tool calls, not only one.
+### 2) What to say out loud while coding
+- "I’m solving this as a staged contract: pass each level before adding complexity."
+- "I’m enforcing deterministic behavior with stable cache keys and bounded retries."
+- "I’m preserving strict sequencing: assistant tool_use, then one user tool_result message."
+- "I’m treating unknown tools and bad args as recoverable errors, not crashes."
 
-### 4) What to say while coding (verbatim-safe)
-- "I scanned tests first to lock the contract, now I am implementing TODOs in dependency order."
-- "I am enforcing a loop invariant: every `tool_use` turn appends tool outputs before next model call."
-- "I am returning structured tool errors instead of crashing so the conversation can recover."
-- "After baseline passes, I check failure paths: missing args, runtime exception, and max-step loop safety."
+### 3) Fast mental model per level
+- Level 1: prove baseline loop and schema wiring.
+- Level 2: prove batched tool execution in one turn.
+- Level 3: prove side effects and resilience together.
+- Level 4: prove control-flow stability under pause + loop pressure.
 
-### 5) Self-check questions before final run
-- Do I process all tool calls in a turn?
-- Can unknown tools and missing args fail safely?
-- Is `max_steps` guaranteed to stop infinite loops?
-- Are error messages JSON and debuggable?
+### 4) Common failure points
+- Returning one user message per tool call instead of one message for the whole turn.
+- Forgetting to pass system prompt/tools on each model call.
+- Retrying all errors instead of retrying only transient runtime faults.
+- Missing max-step guard, causing runaway loops.
+
+### 5) Interview-time strategy
+- Build the minimum passing loop first.
+- Immediately run Level 1.
+- Add one feature per level and re-run stage sequence.
+- Keep final 5 minutes to explain trade-offs and safety boundaries.

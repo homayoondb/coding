@@ -1,150 +1,126 @@
-# Anthropic 55-Minute Coding Study Plan (CV-Tailored)
+# Anthropic 55-Minute Technical Interview Study Plan (Updated)
 
 Interview target: Friday, March 6, 2026  
-Available prep: Sunday-Thursday, with 2-3 work-heavy days
+Current status: you are already finishing `tool_use_with_claude.md`
 
-## What this plan optimizes for
-This plan is tuned to your submitted Anthropic profile (FDE/SA style):
-- production agent systems
-- reliability + safety guardrails
-- enterprise deployment patterns
-- Python-first applied problem solving
+## Calibration to recruiter email
+The round tests:
+1. Writing code with LLMs as a building block.
+2. Prompting to create an agent.
+3. Tool Use and Agents in Anthropic API handling.
+4. Practical coding in Colab (Python) or CodeSignal (TypeScript), open-book, starter code provided.
 
-That means we prioritize interview prompts that look like real deployment engineering, not only generic algorithm puzzles.
+So the plan below prioritizes:
+1. Tool-use execution loop correctness.
+2. Prompt + schema quality for reliable tool calling.
+3. Reliability/safety hardening under time pressure.
+4. Practical fallback coding patterns seen in reports.
 
-## Most likely interviewer pick (based on your CV)
+## Official vs realistic time estimates
+1. CodeSignal Path: Building Effective Agents with Claude in Python  
+Path URL: `https://codesignal.com/learn/paths/building-effective-agents-claude-python`  
+Official: `8h`  
+Realistic for interview prep depth: `11-14h`
+2. CodeSignal Course 1: Exploring Workflows with Claude in Python  
+URL: `https://codesignal.com/learn/courses/exploring-workflows-with-claude`  
+Official: `2h`  
+Realistic: `2.5-3.5h`
+3. CodeSignal Course 2: Developing Claude Agents with Tool Integration in Python  
+URL: `https://codesignal.com/learn/courses/developing-claude-agents-with-tool-integration`  
+Official: `2h`  
+Realistic: `3-4.5h`  
+Note: highest-value single course module for your interview shape.
+4. CodeSignal Course 3: Mastering Agentic Patterns with Claude in Python  
+URL: `https://codesignal.com/learn/courses/mastering-agentic-patterns-with-claude`  
+Official: `2h`  
+Realistic: `2.5-3.5h`
+5. CodeSignal Course 4: Parallelizing Claude Agentic Systems in Python  
+URL: `https://codesignal.com/learn/courses/parallelizing-claude-agentic-systems-in-python`  
+Official: `2h`  
+Realistic: `2.5-3.5h`
+6. Anthropic/Coursera: Building with the Claude API  
+URL: `https://www.coursera.org/learn/building-with-the-claude-api`  
+Module labels total: `13h`  
+Realistic: `12-16h`
+7. One mock package (`NN_mock` + `NN_sol` + `NN_sol.md`)  
+Local path pattern: `notebooks/NN_*`  
+Timed run only: `55m`  
+Run + debrief + compare: `1.5-2h`
 
-1. Reliability triage loop with retries/cache/structured output
-2. Tool-use loop correctness with robust error handling
-3. Safety/guardrail handling of untrusted tool output
-4. Applied data cleaning + metric extraction (SQL + Python)
-5. Practical trace/event reconstruction from runtime samples
+## Ranked prep backlog (courses + mock packages, most important first)
+1. `notebooks/01_mock.ipynb` package (`1.5-2h`) - best hybrid of 55-min tool-use loop + progressive stage constraints
+2. `building_effective_agents_course/02_Developing Claude Agents with Tool Integration in Python/` (`3-4.5h`)
+3. `notebooks/02_mock.ipynb` package (`1.5-2h`)
+4. `notebooks/03_mock.ipynb` package (`1.5-2h`)
+5. `notebooks/04_mock.ipynb` package (`1.5-2h`)
+6. Anthropic/Coursera Module 3: Claude features + tool use (`4-6h`)  
+Course URL: `https://www.coursera.org/learn/building-with-the-claude-api`
+7. `building_effective_agents_course/01_Exploring Workflows with Claude in Python/` (`2.5-3.5h`)
+8. Anthropic/Coursera Module 7: Agentic workflows (`1.5-2h`)  
+Course URL: `https://www.coursera.org/learn/building-with-the-claude-api`
+9. Anthropic/Coursera Module 2: Prompt engineering + evaluation (`2.5-3.5h`)  
+Course URL: `https://www.coursera.org/learn/building-with-the-claude-api`
+10. `building_effective_agents_course/03_Mastering Agentic Patterns with Claude in Python/` (`2.5-3.5h`)
+11. `building_effective_agents_course/04_Parallelizing Claude Agentic Systems in Python/` (`2.5-3.5h`)
+12. `notebooks/05_mock.ipynb` package (`1.5-2h`)
+13. `notebooks/06_mock.ipynb` package (`1.5-2h`)
+14. Anthropic/Coursera Module 1: Claude API basics (`2-3h`)  
+Course URL: `https://www.coursera.org/learn/building-with-the-claude-api`
+15. Anthropic/Coursera Module 4: MCP (`2.5-3.5h`)  
+Course URL: `https://www.coursera.org/learn/building-with-the-claude-api`
 
-This maps to your strongest resume signals: agent deployment, guardrails/evals, production reliability, and customer-facing technical implementation.
+## Priority ladder by available remaining time
+### If you suddenly only have 1 day
+1. `01_mock` package.
+2. `02_mock` package if time remains.
+3. CodeSignal Course 2 only if there is still time.
 
-## CV-Matched Resource Ranking (Most Important First)
+### If you have 2 days
+1. `01_mock` package.
+2. `02_mock` package.
+3. `03_mock` package.
+4. CodeSignal Course 2 core lessons.
 
-1. `notebooks/03_mock.ipynb`
-2. `notebooks/01_mock.ipynb`
-3. `notebooks/02_mock.ipynb`
-4. `notebooks/06_mock.ipynb`
-5. `notebooks/04_mock.ipynb`
-6. `https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use`
-7. `https://docs.anthropic.com/en/api/handling-stop-reasons`
-8. `building_effective_agents_course/02_Developing Claude Agents with Tool Integration in Python/`
-9. `notebooks/05_mock.ipynb`
-10. `notebooks/08_mock.ipynb` (exact LC636)
-11. `notebooks/09_mock.ipynb` (exact LC609)
-12. `notebooks/07_mock.ipynb`
-13. `building_effective_agents_course/01_Exploring Workflows with Claude in Python/` (selective)
-14. `https://support.codesignal.com/hc/en-us/articles/19116922232983-What-are-the-Industry-Coding-Assessment-ICA-rules`
-15. `https://support.codesignal.com/hc/en-us/articles/21025134150423-How-do-I-practice-coding-questions-on-CodeSignal`
-16. `building_effective_agents_course/03_Mastering Agentic Patterns with Claude in Python/` and `building_effective_agents_course/04_Parallelizing Claude Agentic Systems in Python/` (only if extra time)
+### If you have 3 days
+1. `01_mock` package.
+2. `02_mock` package.
+3. `03_mock` package.
+4. `04_mock` package.
+5. CodeSignal Course 2 full.
 
-## Why this ranking changed
+### If you have 4+ days
+1. Finish the 4 core mocks above.
+2. Add Course 3 and Course 4 (selective).
+3. Add one fallback practical mock (`05` or `06`).
 
-- Your prior rank weighted interview-general signal heavily.
-- This revised rank weights **CV-match likelihood** first.
-- For your background, a practical reliability/agent/safety problem is more likely than a pure tokenizer-style prompt.
+## Suggested schedule for your week (with work-heavy days)
+### High-focus day block (`~3.5-4.5h`)
+1. `90-120m`: Course 2 lessons + exercises.
+2. `55m`: one timed mock run.
+3. `45-60m`: debrief against solution/guide and note trade-off talking points.
 
-## Exact mock set now available
+### Work-heavy day block (`~1.5-2h`)
+1. `45-60m`: one Course 2 or Course 1 lesson block.
+2. `55m`: one strict timed mock (or half-mock focused on tool loop only).
 
-- `01_mock.ipynb` + `01_sol.ipynb` + `01_sol.md`
-- `02_mock.ipynb` + `02_sol.ipynb` + `02_sol.md`
-- `03_mock.ipynb` + `03_sol.ipynb` + `03_sol.md`
-- `04_mock.ipynb` + `04_sol.ipynb` + `04_sol.md`
-- `05_mock.ipynb` + `05_sol.ipynb` + `05_sol.md`
-- `06_mock.ipynb` + `06_sol.ipynb` + `06_sol.md`
-- `07_mock.ipynb` + `07_sol.ipynb` + `07_sol.md`
-- `08_mock.ipynb` + `08_sol.ipynb` + `08_sol.md`
-- `09_mock.ipynb` + `09_sol.ipynb` + `09_sol.md`
+## Mock-specific target outcomes (core 01/02/03)
+1. `01`: stage-gated progressive contract under a banking business-logic scenario plus tool-use sequencing.
+2. `02`: prompt + tool schema + clean `tool_use -> tool_result` loop, including `pause_turn`.
+3. `03`: reliability controls under constraints (validation, retry, cache, structured output, max-steps).
+4. `04`: safety guardrails on untrusted tool output while preserving loop correctness.
 
-## Day-by-Day Execution Plan
+## Readiness gates
+- [ ] Can implement a tool loop from scratch in ~35 minutes.
+- [ ] Can explain `tool_use`, `tool_result`, `end_turn`, and `pause_turn` handling clearly.
+- [ ] Can discuss one reliability trade-off and one safety trade-off in under 60 seconds each.
+- [ ] Can finish at least one core mock in strict 55-minute conditions.
 
-### Day 1 (High-value core)
-1. Timed run: `03_mock` (55 min)
-2. Debrief: compare with `03_sol.ipynb`
-3. Study guide: `03_sol.md`
-4. 30-min rewrite from blank (no copy/paste)
-
-### Day 2 (Tool loop + safety)
-1. Timed run: `01_mock`
-2. Debrief with `01_sol.ipynb` and `01_sol.md`
-3. Timed run: `02_mock`
-4. Debrief with `02_sol.ipynb` and `02_sol.md`
-
-### Day 3 (Applied practical coding)
-1. Timed run: `06_mock`
-2. Timed run: `04_mock`
-3. 20-minute verbal defense rehearsal for both
-
-### Day 4 (Role breadth + backup patterns)
-1. Read docs: tool use implementation + stop reasons
-2. Do selected lessons from course module 02
-3. One timed run: `05_mock` or `08_mock` (choose based on weak area)
-
-### Day 5 (Final rehearsal)
-1. One full timed run from top-5 list, no interruptions
-2. 45-minute speaking rehearsal (trade-offs, failure modes, alternatives)
-3. Light review of mistakes only (no new topics)
-
-## If time collapses
-
-### Only 1 focused day remains
-1. `03_mock`
-2. `01_mock`
-3. Docs: tool-use + stop-reasons
-4. 30-minute communication rehearsal
-
-### Only 2 focused days remain
-1. Day 1: `03_mock` + `01_mock`
-2. Day 2: `02_mock` + `06_mock`
-
-### Only 3 focused days remain
-1. Day 1: `03_mock` + `01_mock`
-2. Day 2: `02_mock` + `06_mock`
-3. Day 3: `04_mock` + final rehearsal
-
-## Session format (for every timed mock)
-
-1. 8-10 min: parse prompt + tests + write invariants
-2. 30-35 min: implement TODOs in dependency order
-3. 10 min: edge-case pass + clear explanation pass
-
-## Speaking script during coding
-
-Use this structure out loud:
-
-1. "I’ll lock the contract from tests first, then implement minimal correct behavior."
-2. "I’m implementing in dependency order: validator/helper first, loop/orchestration last."
-3. "Failure modes I’m explicitly handling are invalid input, runtime tool errors, and loop safety."
-4. "Trade-off: I choose clarity and deterministic behavior over extra features in this timebox."
-5. "If this were production, next step is observability and tighter schema validation."
-
-## Self-questions to ask while solving
-
-1. What is the exact output contract the tests enforce?
-2. Which path fails first under malformed input?
-3. Can this loop or workflow get stuck?
-4. What is my deterministic tie-break behavior?
-5. Am I handling both happy path and recovery path?
-
-## Readiness gates (must all be true)
-
-- [ ] Can complete `03_mock` under 55 minutes with clean explanation
-- [ ] Can complete `01_mock` under 55 minutes and explain stop-reason handling
-- [ ] Can complete `02_mock` under 55 minutes and explain trust boundary design
-- [ ] Can explain one reliability trade-off and one safety trade-off without notes
-- [ ] Can describe one concrete production hardening step for every top-5 mock
-
-## LeetCode exact coverage status
-
-- `1236 Web Crawler` -> covered by `05_mock`
-- `1242 Web Crawler Multithreaded` -> covered by `05_mock`
-- `636 Exclusive Time of Functions` -> covered by `08_mock`
-- `609 Find Duplicate File in System` -> covered by `09_mock`
-
-## Notes
-
-- Keep using `NN_sol.ipynb` for reference implementation and `NN_sol.md` for guided walkthrough.
-- If recruiter confirms assistant usage rules, align your practice mode to those constraints.
+## Source links and local resources
+1. Local: `tool_use_with_claude.md`
+2. Official docs: `https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview`
+3. Official docs: `https://platform.claude.com/docs/en/agents-and-tools/tool-use/implement-tool-use`
+4. Official docs: `https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons`
+5. Local course: `building_effective_agents_course/`
+6. Local mock set: `notebooks/01_mock.ipynb` to `notebooks/10_mock.ipynb`
+7. External course path: `https://codesignal.com/learn/paths/building-effective-agents-claude-python`
+8. External course: `https://www.coursera.org/learn/building-with-the-claude-api`

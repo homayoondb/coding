@@ -11,7 +11,9 @@
 Yes, because tests define reliability policy:
 - `cache_hits == 1`
 - `LOOKUP_ATTEMPTS["payments"] == 2` (one retry happened)
+- assistant `tool_use` is immediately followed by user `tool_result`
 - final output must include `summary/action/confidence`
+- `pause_turn` must continue without resetting state
 - max step protection must raise error
 
 ### 2) Coding order
@@ -24,6 +26,8 @@ Yes, because tests define reliability policy:
    - maintain `stats`
    - increment `tool_calls`
    - increment `cache_hits` from tool message metadata
+   - keep Claude ordering by appending one user `tool_result` message per tool-use turn
+   - continue on `pause_turn` without appending a user message
 
 ### 3) One concrete example to narrate aloud
 Use retry scenario:

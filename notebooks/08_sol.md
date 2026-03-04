@@ -1,40 +1,40 @@
-# 08_sol Guide: LeetCode 636 Exclusive Time of Functions
+# 08_sol Guide: Tokenizer Greedy Longest Match
 
 
-## Walkthrough: Exactly How to Solve `08_mock` (LC 636)
+## Walkthrough: Exactly How to Solve `08_mock`
 
 ### 0) First 2 minutes
-- Write these invariants first:
-  - stack top = currently running function
-  - `prev_time` = first unaccounted timestamp
-  - end event is inclusive
+- Write the greedy rule in a comment:
+  - longest match at index
+  - fallback to `UNK` and advance one char
+- Confirm `UNK` is mandatory.
 
 ### 1) Should I read tests now?
 Yes:
-- Confirm canonical sample expected `[3,4]`.
-- Confirm nested case and single-tick case.
-- Confirm invalid unmatched end should raise error.
+- `apple -> [2]` proves longest token priority.
+- `bbb` with compression gives one `-1`.
+- custom vocab test validates greedy at each step.
+- missing `UNK` must raise `vocab_missing_UNK`.
 
 ### 2) Coding order
-1. Parse log triplets (`fid:action:ts`) and validate.
-2. Start event: credit current top function with `ts - prev_time`.
-3. Push new function and set `prev_time = ts`.
-4. End event: credit top function with `ts - prev_time + 1`.
-5. Pop and set `prev_time = ts + 1`.
+1. Validate `UNK` exists.
+2. Precompute max token length (excluding `UNK`).
+3. Implement greedy scan in `tokenize_longest`.
+4. Add compression logic.
+5. Implement `tokenize_batch` as list comprehension.
 
 ### 3) One concrete example to narrate aloud
-For `0:start:0, 1:start:2, 1:end:5, 0:end:6`:
-- function 0 gets `2` units before function 1 starts
-- function 1 gets `4` units (`2..5` inclusive)
-- function 0 gets final `1` unit (`6..6`)
-- total `[3,4]`
+`apppie` with vocab `app=1, pie=3`:
+- index 0 longest match is `app` -> `1`
+- index 3 longest match is `pie` -> `3`
+- output `[1,3]`
 
 ### 4) What to say while coding
-- "I am using a stack because nesting depth changes over time."
-- "I track `prev_time` so every tick is counted exactly once."
-- "Inclusive end means I add `+1` and then move `prev_time` to `ts+1`."
+- "I’m implementing greedy longest-match with bounded window length."
+- "I scan from longest to shortest candidate at each index."
+- "Compression is optional post-processing and does not change base matching semantics."
 
 ### 5) Self-check before final run
-- Do I double-count any time interval?
-- Did I handle inclusive end correctly?
-- Do malformed sequences fail explicitly?
+- Do I ever skip characters incorrectly?
+- Does compression only collapse consecutive UNKs?
+- Is batch wrapper behavior identical to single-string behavior?

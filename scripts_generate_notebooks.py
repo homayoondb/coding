@@ -272,10 +272,17 @@ class ScriptedModel:
     def __init__(self, responses: list[dict[str, Any]]) -> None:
         self._responses = deepcopy(responses)
         self._index = 0
+        self.last_system_prompt: str | None = None
+        self.last_tools: list[dict[str, Any]] = []
 
-    def __call__(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    def __call__(self, messages: list[dict[str, Any]], system_prompt: str, tools: list[dict[str, Any]]) -> dict[str, Any]:
+        self.last_system_prompt = system_prompt
+        self.last_tools = deepcopy(tools)
         if self._index >= len(self._responses):
-            return {"stop_reason": "end_turn", "output_text": "No scripted response left."}
+            return {
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "No scripted response left."}],
+            }
         response = self._responses[self._index]
         self._index += 1
         return deepcopy(response)
@@ -284,6 +291,24 @@ class ScriptedModel:
 
 exam01_question_logic = code(
     '''
+def build_agent_system_prompt() -> str:
+    """Return concise system instructions for a safe tool-using support agent."""
+    # TODO:
+    # - Tell the model to use tools for factual checks before claiming account/order facts.
+    # - Tell the model to never fabricate tool outputs.
+    # - Tell the model to ask a clarifying question when required policy inputs are missing.
+    # - Keep final answers concise and grounded in tool results.
+    raise NotImplementedError
+
+
+def build_tool_schemas(tool_registry: dict[str, Callable[..., Any]]) -> list[dict[str, Any]]:
+    """Build minimal Claude-style tool definitions from the local tool registry."""
+    # TODO:
+    # - Return list entries with keys: name, description, input_schema.
+    # - input_schema must be JSON Schema object with required fields from function signature.
+    raise NotImplementedError
+
+
 def validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> str | None:
     """Return an error string if invalid, otherwise None."""
     # TODO:
@@ -295,16 +320,15 @@ def validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Calla
 
 
 def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> dict[str, Any]:
-    """Return tool message with is_error and JSON content."""
+    """Return Claude-style tool_result content block."""
     # TODO:
     # - Call validate_tool_call first.
     # - Execute valid tools with **tool_call["input"].
     # - Catch runtime exceptions and return is_error=True payload.
-    # Return shape:
+    # Return block shape:
     # {
-    #   "role": "tool",
-    #   "tool_call_id": "...",
-    #   "name": "...",
+    #   "type": "tool_result",
+    #   "tool_use_id": "...",
     #   "is_error": bool,
     #   "content": "json-string"
     # }
@@ -313,15 +337,20 @@ def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callab
 
 def run_agent(
     user_prompt: str,
-    model: Callable[[list[dict[str, Any]]], dict[str, Any]],
+    model: Callable[[list[dict[str, Any]], str, list[dict[str, Any]]], dict[str, Any]],
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    """Run tool-use loop until end_turn or max_steps exhaustion."""
+    """Run Claude-style tool-use loop until end_turn or max_steps exhaustion."""
     # TODO:
-    # - Initialize messages with user prompt.
+    # - Initialize messages in Messages API shape.
+    # - Build and pass system prompt to model on every model call.
+    # - Build tool schemas and pass them to model on every model call.
     # - Loop up to max_steps.
-    # - On stop_reason == "tool_use", execute all tool calls and append tool messages.
+    # - Append assistant response content each turn.
+    # - On stop_reason == "tool_use", execute all tool_use blocks and append ONE user message
+    #   with only tool_result blocks (in the same order).
+    # - On stop_reason == "pause_turn", continue the loop without adding a user message.
     # - On stop_reason == "end_turn", return {"final_text": ..., "messages": ...}.
     # - Raise RuntimeError("max_steps_exceeded") if no end_turn in time.
     raise NotImplementedError
@@ -330,6 +359,41 @@ def run_agent(
 
 exam01_answer_logic = code(
     '''
+def build_agent_system_prompt() -> str:
+    return (
+        "You are a customer support agent. "
+        "Use tools to verify order and policy facts before answering. "
+        "Never fabricate tool outputs or policy decisions. "
+        "If required inputs are missing, ask a concise clarifying question. "
+        "Keep final answers short and grounded in tool results."
+    )
+
+
+def build_tool_schemas(tool_registry: dict[str, Callable[..., Any]]) -> list[dict[str, Any]]:
+    schemas: list[dict[str, Any]] = []
+    for name, fn in sorted(tool_registry.items()):
+        sig = inspect.signature(fn)
+        properties: dict[str, dict[str, str]] = {}
+        required: list[str] = []
+        for param in sig.parameters.values():
+            properties[param.name] = {"type": "string"}
+            if param.default is inspect._empty:
+                required.append(param.name)
+        schemas.append(
+            {
+                "name": name,
+                "description": f"Call {name} to retrieve deterministic backend data.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                    "additionalProperties": True,
+                },
+            }
+        )
+    return schemas
+
+
 def validate_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callable[..., Any]]) -> str | None:
     required = {"id", "name", "input"}
     if not required.issubset(tool_call):
@@ -360,9 +424,8 @@ def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callab
     validation_error = validate_tool_call(tool_call, tool_registry)
     if validation_error:
         return {
-            "role": "tool",
-            "tool_call_id": tool_id,
-            "name": tool_name,
+            "type": "tool_result",
+            "tool_use_id": tool_id,
             "is_error": True,
             "content": json.dumps({"error": validation_error}, sort_keys=True),
         }
@@ -370,17 +433,15 @@ def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callab
     try:
         result = tool_registry[tool_name](**tool_call["input"])
         return {
-            "role": "tool",
-            "tool_call_id": tool_id,
-            "name": tool_name,
+            "type": "tool_result",
+            "tool_use_id": tool_id,
             "is_error": False,
             "content": json.dumps({"result": result}, sort_keys=True),
         }
     except Exception as exc:  # pragma: no cover - explicit for interview robustness
         return {
-            "role": "tool",
-            "tool_call_id": tool_id,
-            "name": tool_name,
+            "type": "tool_result",
+            "tool_use_id": tool_id,
             "is_error": True,
             "content": json.dumps({"error": str(exc)}, sort_keys=True),
         }
@@ -388,26 +449,42 @@ def execute_tool_call(tool_call: dict[str, Any], tool_registry: dict[str, Callab
 
 def run_agent(
     user_prompt: str,
-    model: Callable[[list[dict[str, Any]]], dict[str, Any]],
+    model: Callable[[list[dict[str, Any]], str, list[dict[str, Any]]], dict[str, Any]],
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
+    system_prompt = build_agent_system_prompt()
+    tools = build_tool_schemas(tool_registry)
 
     for _ in range(max_steps):
-        response = model(messages)
+        response = model(messages, system_prompt, tools)
         stop_reason = response.get("stop_reason")
+        content = response.get("content", [])
+        if not isinstance(content, list):
+            raise RuntimeError("assistant_content_must_be_list")
+        messages.append({"role": "assistant", "content": content})
 
         if stop_reason == "tool_use":
-            tool_calls = response.get("tool_calls", [])
-            if not isinstance(tool_calls, list):
-                raise RuntimeError("tool_calls_must_be_list")
+            tool_calls = [block for block in content if block.get("type") == "tool_use"]
+            if not tool_calls:
+                raise RuntimeError("tool_use_without_blocks")
+            tool_results: list[dict[str, Any]] = []
             for tool_call in tool_calls:
-                messages.append(execute_tool_call(tool_call, tool_registry))
+                tool_results.append(execute_tool_call(tool_call, tool_registry))
+            messages.append({"role": "user", "content": tool_results})
+            continue
+
+        if stop_reason == "pause_turn":
             continue
 
         if stop_reason == "end_turn":
-            return {"final_text": str(response.get("output_text", "")).strip(), "messages": messages}
+            text = " ".join(
+                block.get("text", "").strip()
+                for block in content
+                if block.get("type") == "text"
+            ).strip()
+            return {"final_text": text, "messages": messages}
 
         raise RuntimeError(f"unsupported_stop_reason:{stop_reason}")
 
@@ -417,78 +494,139 @@ def run_agent(
 
 exam01_tests = code(
     '''
-def _tool_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [m for m in messages if m.get("role") == "tool"]
+def _tool_result_blocks(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") != "user":
+            continue
+        for block in message.get("content", []):
+            if block.get("type") == "tool_result":
+                blocks.append(block)
+    return blocks
 
 
 def run_exam01_tests() -> None:
     reset_state()
+    prompt = build_agent_system_prompt().lower()
+    assert "use tools" in prompt
+    assert "never fabricate" in prompt
+    assert "clarifying question" in prompt
+    tool_defs = build_tool_schemas(TOOL_REGISTRY)
+    assert sorted(tool["name"] for tool in tool_defs) == sorted(TOOL_REGISTRY.keys())
 
     # 1) Single tool call
     model = ScriptedModel(
         [
             {
                 "stop_reason": "tool_use",
-                "tool_calls": [{"id": "t1", "name": "get_orders", "input": {"user_id": "u-100"}}],
+                "content": [
+                    {"type": "tool_use", "id": "t1", "name": "get_orders", "input": {"user_id": "u-100"}}
+                ],
             },
-            {"stop_reason": "end_turn", "output_text": "Order o-900 is delivered."},
+            {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Order o-900 is delivered."}]},
         ]
     )
     result = run_agent("Where is my order?", model, TOOL_REGISTRY)
     assert "delivered" in result["final_text"].lower()
-    assert len(_tool_messages(result["messages"])) == 1
+    assert len(_tool_result_blocks(result["messages"])) == 1
+    assert model.last_system_prompt is not None
+    assert "use tools" in model.last_system_prompt.lower()
+    assert sorted(tool["name"] for tool in model.last_tools) == sorted(TOOL_REGISTRY.keys())
 
     # 2) Multiple tools in one model turn
     model = ScriptedModel(
         [
             {
                 "stop_reason": "tool_use",
-                "tool_calls": [
+                "content": [
                     {
+                        "type": "tool_use",
                         "id": "t2",
                         "name": "policy_check",
                         "input": {"order_id": "o-900", "reason": "damaged", "days_since_delivery": 3},
                     },
-                    {"id": "t3", "name": "create_refund", "input": {"order_id": "o-900", "amount": 42.5}},
+                    {
+                        "type": "tool_use",
+                        "id": "t3",
+                        "name": "create_refund",
+                        "input": {"order_id": "o-900", "amount": 42.5},
+                    },
                 ],
             },
-            {"stop_reason": "end_turn", "output_text": "Refund submitted."},
+            {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Refund submitted."}]},
         ]
     )
     result = run_agent("Refund my damaged item", model, TOOL_REGISTRY)
-    assert len(_tool_messages(result["messages"])) == 2
+    assert len(_tool_result_blocks(result["messages"])) == 2
     assert REFUNDS and REFUNDS[-1]["order_id"] == "o-900"
+    assistant_idx = next(i for i, m in enumerate(result["messages"]) if m["role"] == "assistant")
+    assert result["messages"][assistant_idx + 1]["role"] == "user"
+    assert all(
+        block.get("type") == "tool_result" for block in result["messages"][assistant_idx + 1]["content"]
+    )
 
     # 3) Missing args -> is_error tool message
     model = ScriptedModel(
         [
-            {"stop_reason": "tool_use", "tool_calls": [{"id": "bad-args", "name": "get_orders", "input": {}}]},
-            {"stop_reason": "end_turn", "output_text": "Handled error."},
+            {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "bad-args", "name": "get_orders", "input": {}}],
+            },
+            {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Handled error."}]},
         ]
     )
     result = run_agent("debug", model, TOOL_REGISTRY)
-    tool_msg = _tool_messages(result["messages"])[0]
-    assert tool_msg["is_error"] is True
-    assert "missing_required_args" in tool_msg["content"]
+    tool_block = _tool_result_blocks(result["messages"])[0]
+    assert tool_block["is_error"] is True
+    assert "missing_required_args" in tool_block["content"]
 
     # 4) Runtime exception -> is_error tool message
     model = ScriptedModel(
         [
-            {"stop_reason": "tool_use", "tool_calls": [{"id": "boom", "name": "get_orders", "input": {"user_id": "boom"}}]},
-            {"stop_reason": "end_turn", "output_text": "Handled exception."},
+            {
+                "stop_reason": "tool_use",
+                "content": [
+                    {"type": "tool_use", "id": "boom", "name": "get_orders", "input": {"user_id": "boom"}}
+                ],
+            },
+            {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Handled exception."}]},
         ]
     )
     result = run_agent("debug", model, TOOL_REGISTRY)
-    tool_msg = _tool_messages(result["messages"])[0]
-    assert tool_msg["is_error"] is True
-    assert "backend unavailable" in tool_msg["content"]
+    tool_block = _tool_result_blocks(result["messages"])[0]
+    assert tool_block["is_error"] is True
+    assert "backend unavailable" in tool_block["content"]
 
-    # 5) Max step protection
+    # 5) pause_turn continuation should recover on later end_turn
     model = ScriptedModel(
         [
-            {"stop_reason": "tool_use", "tool_calls": [{"id": "loop1", "name": "get_orders", "input": {"user_id": "u-200"}}]},
-            {"stop_reason": "tool_use", "tool_calls": [{"id": "loop2", "name": "get_orders", "input": {"user_id": "u-200"}}]},
-            {"stop_reason": "tool_use", "tool_calls": [{"id": "loop3", "name": "get_orders", "input": {"user_id": "u-200"}}]},
+            {"stop_reason": "pause_turn", "content": [{"type": "text", "text": "need more thinking time"}]},
+            {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "p1", "name": "get_orders", "input": {"user_id": "u-100"}}],
+            },
+            {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Recovered after pause."}]},
+        ]
+    )
+    result = run_agent("paused", model, TOOL_REGISTRY)
+    assert "Recovered after pause." in result["final_text"]
+    assert len(_tool_result_blocks(result["messages"])) == 1
+
+    # 6) Max step protection
+    model = ScriptedModel(
+        [
+            {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "loop1", "name": "get_orders", "input": {"user_id": "u-200"}}],
+            },
+            {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "loop2", "name": "get_orders", "input": {"user_id": "u-200"}}],
+            },
+            {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "loop3", "name": "get_orders", "input": {"user_id": "u-200"}}],
+            },
         ]
     )
     try:
@@ -516,12 +654,16 @@ This is the highest-priority mock for your interview shape.
 Implement an agent loop that uses local tools to inspect orders, evaluate policy, and submit refunds.
 
 ## What to implement
-1. `validate_tool_call`
-2. `execute_tool_call`
-3. `run_agent`
+1. `build_agent_system_prompt`
+2. `build_tool_schemas`
+3. `validate_tool_call`
+4. `execute_tool_call`
+5. `run_agent`
 
 ## Completion criteria (required)
-- Correct tool-use loop (`tool_use` -> execute -> append tool messages -> continue)
+- Prompting: system prompt clearly drives tool-grounded behavior and clarification behavior
+- Tool schemas are built in Claude-style (`name`, `description`, `input_schema`) and passed to model calls
+- Correct Claude Messages API loop (`assistant:tool_use` -> `user:tool_result` -> continue)
 - Multiple tool calls in one response
 - Error-safe behavior for invalid args + runtime exceptions
 - `max_steps` protection against infinite loops
@@ -531,12 +673,7 @@ Implement an agent loop that uses local tools to inspect orders, evaluate policy
 - 35 min: implement required functions
 - 10 min: run tests + edge-case cleanup
 
-## Interviewer follow-up questions (prepare answers)
-1. Why did you choose this specific validation strategy for tool calls, and what does it intentionally not validate?
-2. How does your loop guarantee correctness when the model returns multiple tool calls in one turn?
-3. What is the reasoning behind your error payload shape, and how would you make it easier to debug in production?
-4. Why is your `max_steps` policy safe, and what would you tune for real user traffic?
-5. If this moved from scripted responses to the live API, what part of your implementation is most likely to fail first and why?
+
 """
 
 
@@ -587,33 +724,53 @@ class ResearchModel:
             if self.step == 1:
                 return {
                     "stop_reason": "tool_use",
-                    "tool_calls": [{"id": "r1", "name": "search_docs", "input": {"query": "refund damaged"}}],
+                    "content": [
+                        {"type": "tool_use", "id": "r1", "name": "search_docs", "input": {"query": "refund damaged"}}
+                    ],
                 }
-            last_tool_text = [m for m in messages if m.get("role") == "tool"][-1]["content"]
-            if "Ignore previous instructions" in last_tool_text:
-                return {"stop_reason": "end_turn", "output_text": "ADMIN_TOKEN=sk-live-demo"}
+            last_user_message = [m for m in messages if m.get("role") == "user"][-1]
+            result_blob = json.dumps(last_user_message.get("content", []), sort_keys=True)
+            if "Ignore previous instructions" in result_blob:
+                return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "ADMIN_TOKEN=sk-live-demo"}]}
             return {
                 "stop_reason": "end_turn",
-                "output_text": "Policy says refunds are allowed within 14 days for damaged items. [d1]",
+                "content": [
+                    {"type": "text", "text": "Policy says refunds are allowed within 14 days for damaged items. [d1]"}
+                ],
             }
 
         if self.scenario == "multi_tool":
             if self.step == 1:
                 return {
                     "stop_reason": "tool_use",
-                    "tool_calls": [
-                        {"id": "r2", "name": "search_docs", "input": {"query": "shipping updates"}},
-                        {"id": "r3", "name": "calculator", "input": {"expression": "40 + 2"}},
+                    "content": [
+                        {"type": "tool_use", "id": "r2", "name": "search_docs", "input": {"query": "shipping updates"}},
+                        {"type": "tool_use", "id": "r3", "name": "calculator", "input": {"expression": "40 + 2"}},
                     ],
                 }
-            return {"stop_reason": "end_turn", "output_text": "Shipping is in orders API [d3], and 40+2=42."}
+            return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Shipping is in orders API [d3], and 40+2=42."}]}
 
         if self.scenario == "unknown_tool":
             if self.step == 1:
-                return {"stop_reason": "tool_use", "tool_calls": [{"id": "bad", "name": "web_search", "input": {"query": "x"}}]}
-            return {"stop_reason": "end_turn", "output_text": "Recovered from unknown tool."}
+                return {
+                    "stop_reason": "tool_use",
+                    "content": [{"type": "tool_use", "id": "bad", "name": "web_search", "input": {"query": "x"}}],
+                }
+            return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Recovered from unknown tool."}]}
 
-        return {"stop_reason": "end_turn", "output_text": "Done."}
+        if self.scenario == "pause_turn":
+            if self.step == 1:
+                return {"stop_reason": "pause_turn", "content": [{"type": "text", "text": "continuing..."}]}
+            if self.step == 2:
+                return {
+                    "stop_reason": "tool_use",
+                    "content": [
+                        {"type": "tool_use", "id": "p2", "name": "search_docs", "input": {"query": "refund damaged"}}
+                    ],
+                }
+            return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Refund policy found. [d1]"}]}
+
+        return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "Done."}]}
 '''
 )
 
@@ -634,11 +791,13 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    """Run tool-use loop with safe unknown-tool handling and output sanitization."""
+    """Run Claude-style tool-use loop with safe unknown-tool handling and sanitization."""
     # TODO:
-    # - Build message list from user_prompt.
-    # - On tool_use: validate tool call, execute all tool calls, sanitize tool outputs.
-    # - Return tool messages with JSON content.
+    # - Build message list from user_prompt in Messages API shape.
+    # - Append assistant content each turn.
+    # - On tool_use: validate all tool_use blocks, execute tools, sanitize outputs.
+    # - Append one user message with only tool_result blocks.
+    # - On pause_turn: continue the loop without adding a user message.
     # - On end_turn: return {"final_text": ..., "messages": ...}.
     # - Raise RuntimeError("max_steps_exceeded") on exhaustion.
     raise NotImplementedError
@@ -691,29 +850,33 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
 
     for _ in range(max_steps):
         response = model(messages)
         stop_reason = response.get("stop_reason")
+        content = response.get("content", [])
+        if not isinstance(content, list):
+            raise RuntimeError("assistant_content_must_be_list")
+        messages.append({"role": "assistant", "content": content})
 
         if stop_reason == "tool_use":
-            tool_calls = response.get("tool_calls", [])
-            if not isinstance(tool_calls, list):
-                raise RuntimeError("tool_calls_must_be_list")
+            tool_calls = [block for block in content if block.get("type") == "tool_use"]
+            if not tool_calls:
+                raise RuntimeError("tool_use_without_blocks")
+            tool_results: list[dict[str, Any]] = []
             for tool_call in tool_calls:
                 tool_id = str(tool_call.get("id", "missing_id"))
                 tool_name = str(tool_call.get("name", "missing_name"))
 
                 err = _validate_tool_call(tool_call, tool_registry)
                 if err:
-                    messages.append(
+                    tool_results.append(
                         {
-                            "role": "tool",
-                            "tool_call_id": tool_id,
-                            "name": tool_name,
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
                             "is_error": True,
-                            "content": json.dumps({"error": err}, sort_keys=True),
+                            "content": json.dumps({"error": err, "name": tool_name}, sort_keys=True),
                         }
                     )
                     continue
@@ -721,29 +884,33 @@ def run_agent(
                 try:
                     result = tool_registry[tool_name](**tool_call["input"])
                     safe = sanitize_tool_output(json.dumps({"result": result}, sort_keys=True))
-                    messages.append(
+                    tool_results.append(
                         {
-                            "role": "tool",
-                            "tool_call_id": tool_id,
-                            "name": tool_name,
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
                             "is_error": False,
                             "content": safe,
                         }
                     )
                 except Exception as exc:  # pragma: no cover
-                    messages.append(
+                    tool_results.append(
                         {
-                            "role": "tool",
-                            "tool_call_id": tool_id,
-                            "name": tool_name,
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
                             "is_error": True,
                             "content": json.dumps({"error": str(exc)}, sort_keys=True),
                         }
                     )
+            messages.append({"role": "user", "content": tool_results})
+            continue
+
+        if stop_reason == "pause_turn":
             continue
 
         if stop_reason == "end_turn":
-            final_text = sanitize_tool_output(str(response.get("output_text", "")).strip())
+            final_text = sanitize_tool_output(
+                " ".join(block.get("text", "").strip() for block in content if block.get("type") == "text").strip()
+            )
             return {"final_text": final_text, "messages": messages}
 
         raise RuntimeError(f"unsupported_stop_reason:{stop_reason}")
@@ -754,6 +921,17 @@ def run_agent(
 
 exam02_tests = code(
     '''
+def _tool_result_blocks(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") != "user":
+            continue
+        for block in message.get("content", []):
+            if block.get("type") == "tool_result":
+                blocks.append(block)
+    return blocks
+
+
 def run_exam02_tests() -> None:
     # 1) Injection defense
     model = ResearchModel("injection")
@@ -764,16 +942,26 @@ def run_exam02_tests() -> None:
     # 2) Multiple tool calls in one model response
     model = ResearchModel("multi_tool")
     result = run_agent("Need shipping policy and math", model, TOOL_REGISTRY)
-    tool_msgs = [m for m in result["messages"] if m.get("role") == "tool"]
-    assert len(tool_msgs) == 2
+    tool_blocks = _tool_result_blocks(result["messages"])
+    assert len(tool_blocks) == 2
 
     # 3) Unknown tool should become error tool message and still recover
     model = ResearchModel("unknown_tool")
     result = run_agent("test unknown", model, TOOL_REGISTRY)
-    tool_msg = [m for m in result["messages"] if m.get("role") == "tool"][0]
-    assert tool_msg["is_error"] is True
-    assert "unknown_tool" in tool_msg["content"]
+    tool_block = _tool_result_blocks(result["messages"])[0]
+    assert tool_block["is_error"] is True
+    assert "unknown_tool" in tool_block["content"]
     assert "Recovered" in result["final_text"]
+    assistant_idx = next(i for i, m in enumerate(result["messages"]) if m["role"] == "assistant")
+    assert result["messages"][assistant_idx + 1]["role"] == "user"
+    assert all(
+        block.get("type") == "tool_result" for block in result["messages"][assistant_idx + 1]["content"]
+    )
+
+    # 4) pause_turn continuation should recover on later end_turn
+    model = ResearchModel("pause_turn")
+    result = run_agent("continue please", model, TOOL_REGISTRY)
+    assert "[d1]" in result["final_text"]
 
     print("02_mock tests passed")
 
@@ -798,6 +986,7 @@ Build a local research agent that uses tools safely, including prompt-injection 
 ## Completion criteria (required)
 - Safe handling of unknown tools and invalid args
 - Multiple tool calls in one turn
+- Correct Claude message sequencing (`assistant tool_use` then `user tool_result`)
 - Sanitization before tool output is fed back to the model
 - Final answer returned on `stop_reason == "end_turn"`
 
@@ -806,12 +995,7 @@ Build a local research agent that uses tools safely, including prompt-injection 
 - 35 min: implement sanitize + loop
 - 10 min: run tests + verify no leak paths
 
-## Interviewer follow-up questions (prepare answers)
-1. What prompt-injection patterns does your sanitizer catch, and where can it still be bypassed?
-2. Why do you sanitize at the points you chose, and what would happen if sanitization only happened once?
-3. How do you balance strict security filtering against removing legitimate content?
-4. Why did you model unknown tools as error tool messages instead of immediately failing the run?
-5. What additional guardrails would you add if tool output came from untrusted external APIs?
+
 """
 
 
@@ -864,26 +1048,80 @@ class TriageModel:
 
         if self.scenario == "cache":
             if self.step == 1:
-                return {"stop_reason": "tool_use", "tool_calls": [{"id": "a1", "name": "lookup_runbook", "input": {"service": "billing"}}]}
+                return {
+                    "stop_reason": "tool_use",
+                    "content": [
+                        {"type": "tool_use", "id": "a1", "name": "lookup_runbook", "input": {"service": "billing"}}
+                    ],
+                }
             if self.step == 2:
-                return {"stop_reason": "tool_use", "tool_calls": [{"id": "a2", "name": "lookup_runbook", "input": {"service": "billing"}}]}
+                return {
+                    "stop_reason": "tool_use",
+                    "content": [
+                        {"type": "tool_use", "id": "a2", "name": "lookup_runbook", "input": {"service": "billing"}}
+                    ],
+                }
             return {
                 "stop_reason": "end_turn",
-                "output_text": json.dumps({"summary": "billing issue mitigated", "action": "restart_billing_workers", "confidence": 0.78}),
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"summary": "billing issue mitigated", "action": "restart_billing_workers", "confidence": 0.78}
+                        ),
+                    }
+                ],
             }
 
         if self.scenario == "retry":
             if self.step == 1:
-                return {"stop_reason": "tool_use", "tool_calls": [{"id": "b1", "name": "lookup_runbook", "input": {"service": "payments"}}]}
+                return {
+                    "stop_reason": "tool_use",
+                    "content": [
+                        {"type": "tool_use", "id": "b1", "name": "lookup_runbook", "input": {"service": "payments"}}
+                    ],
+                }
             return {
                 "stop_reason": "end_turn",
-                "output_text": json.dumps({"summary": "payments issue mitigated", "action": "restart_payments_workers", "confidence": 0.81}),
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"summary": "payments issue mitigated", "action": "restart_payments_workers", "confidence": 0.81}
+                        ),
+                    }
+                ],
             }
 
         if self.scenario == "loop":
-            return {"stop_reason": "tool_use", "tool_calls": [{"id": "loop", "name": "fetch_ticket", "input": {"ticket_id": "inc-1"}}]}
+            return {
+                "stop_reason": "tool_use",
+                "content": [{"type": "tool_use", "id": "loop", "name": "fetch_ticket", "input": {"ticket_id": "inc-1"}}],
+            }
 
-        return {"stop_reason": "end_turn", "output_text": "{}"}
+        if self.scenario == "pause_turn":
+            if self.step == 1:
+                return {"stop_reason": "pause_turn", "content": [{"type": "text", "text": "triage in progress"}]}
+            if self.step == 2:
+                return {
+                    "stop_reason": "tool_use",
+                    "content": [
+                        {"type": "tool_use", "id": "c1", "name": "lookup_runbook", "input": {"service": "billing"}}
+                    ],
+                }
+            return {
+                "stop_reason": "end_turn",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"summary": "billing issue mitigated", "action": "restart_billing_workers", "confidence": 0.73}
+                        ),
+                    }
+                ],
+            }
+
+        return {"stop_reason": "end_turn", "content": [{"type": "text", "text": "{}"}]}
 '''
 )
 
@@ -900,7 +1138,7 @@ def execute_tool_call(
     # - Cache key = name + stable JSON input.
     # - Use cache for repeated calls (set from_cache=True).
     # - Retry once on transient RuntimeError.
-    # - Return tool message: role/tool_call_id/name/is_error/content/from_cache.
+    # - Return tool_result block: type/tool_use_id/is_error/content/from_cache.
     raise NotImplementedError
 
 
@@ -919,10 +1157,12 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    """Run reliability-focused agent loop and return final + stats."""
+    """Run reliability-focused Claude-style loop and return final + stats."""
     # TODO:
     # - Track stats: tool_calls, cache_hits.
-    # - On tool_use, execute all tools and append tool messages.
+    # - Append assistant content each turn.
+    # - On tool_use, execute all tool_use blocks and append one user tool_result message.
+    # - On pause_turn, continue the loop without adding a user message.
     # - On end_turn, return parsed final output + stats + messages.
     # - Raise RuntimeError("max_steps_exceeded") on exhaustion.
     raise NotImplementedError
@@ -967,9 +1207,8 @@ def execute_tool_call(
     err = _validate_tool_call(tool_call, tool_registry)
     if err:
         return {
-            "role": "tool",
-            "tool_call_id": tool_id,
-            "name": tool_name,
+            "type": "tool_result",
+            "tool_use_id": tool_id,
             "is_error": True,
             "from_cache": False,
             "content": json.dumps({"error": err}, sort_keys=True),
@@ -977,7 +1216,7 @@ def execute_tool_call(
 
     if cache_key in cache:
         cached = deepcopy(cache[cache_key])
-        cached["tool_call_id"] = tool_id
+        cached["tool_use_id"] = tool_id
         cached["from_cache"] = True
         return cached
 
@@ -987,9 +1226,8 @@ def execute_tool_call(
         try:
             result = tool_registry[tool_name](**payload)
             msg = {
-                "role": "tool",
-                "tool_call_id": tool_id,
-                "name": tool_name,
+                "type": "tool_result",
+                "tool_use_id": tool_id,
                 "is_error": False,
                 "from_cache": False,
                 "content": json.dumps({"result": result}, sort_keys=True),
@@ -1001,18 +1239,16 @@ def execute_tool_call(
             if transient and attempt == 1:
                 continue
             return {
-                "role": "tool",
-                "tool_call_id": tool_id,
-                "name": tool_name,
+                "type": "tool_result",
+                "tool_use_id": tool_id,
                 "is_error": True,
                 "from_cache": False,
                 "content": json.dumps({"error": str(exc)}, sort_keys=True),
             }
         except Exception as exc:  # pragma: no cover
             return {
-                "role": "tool",
-                "tool_call_id": tool_id,
-                "name": tool_name,
+                "type": "tool_result",
+                "tool_use_id": tool_id,
                 "is_error": True,
                 "from_cache": False,
                 "content": json.dumps({"error": str(exc)}, sort_keys=True),
@@ -1036,28 +1272,42 @@ def run_agent(
     tool_registry: dict[str, Callable[..., Any]],
     max_steps: int = 6,
 ) -> dict[str, Any]:
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": [{"type": "text", "text": user_prompt}]}]
     cache: dict[str, dict[str, Any]] = {}
     stats = {"tool_calls": 0, "cache_hits": 0}
 
     for _ in range(max_steps):
         response = model(messages)
         stop_reason = response.get("stop_reason")
+        content = response.get("content", [])
+        if not isinstance(content, list):
+            raise RuntimeError("assistant_content_must_be_list")
+        messages.append({"role": "assistant", "content": content})
 
         if stop_reason == "tool_use":
-            tool_calls = response.get("tool_calls", [])
-            if not isinstance(tool_calls, list):
-                raise RuntimeError("tool_calls_must_be_list")
+            tool_calls = [block for block in content if block.get("type") == "tool_use"]
+            if not tool_calls:
+                raise RuntimeError("tool_use_without_blocks")
+            tool_results: list[dict[str, Any]] = []
             for tool_call in tool_calls:
                 tool_msg = execute_tool_call(tool_call, tool_registry, cache)
                 stats["tool_calls"] += 1
                 if tool_msg.get("from_cache"):
                     stats["cache_hits"] += 1
-                messages.append(tool_msg)
+                tool_results.append(tool_msg)
+            messages.append({"role": "user", "content": tool_results})
+            continue
+
+        if stop_reason == "pause_turn":
             continue
 
         if stop_reason == "end_turn":
-            final = parse_final_output(str(response.get("output_text", "{}")))
+            output_text = " ".join(
+                block.get("text", "").strip()
+                for block in content
+                if block.get("type") == "text"
+            ).strip()
+            final = parse_final_output(output_text or "{}")
             return {"final": final, "messages": messages, "stats": stats}
 
         raise RuntimeError(f"unsupported_stop_reason:{stop_reason}")
@@ -1068,6 +1318,17 @@ def run_agent(
 
 exam03_tests = code(
     '''
+def _tool_result_blocks(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") != "user":
+            continue
+        for block in message.get("content", []):
+            if block.get("type") == "tool_result":
+                blocks.append(block)
+    return blocks
+
+
 def run_exam03_tests() -> None:
     reset_state()
 
@@ -1076,6 +1337,7 @@ def run_exam03_tests() -> None:
     result = run_agent("triage billing", model, TOOL_REGISTRY)
     assert result["stats"]["cache_hits"] == 1
     assert LOOKUP_ATTEMPTS["billing"] == 1
+    assert len(_tool_result_blocks(result["messages"])) == 2
 
     # 2) Retry behavior for transient errors
     reset_state()
@@ -1087,7 +1349,20 @@ def run_exam03_tests() -> None:
     # 3) Structured final output required
     assert {"summary", "action", "confidence"}.issubset(result["final"].keys())
 
-    # 4) Max step protection
+    # 4) Claude sequencing: assistant tool_use immediately followed by user tool_result
+    assistant_idx = next(i for i, m in enumerate(result["messages"]) if m["role"] == "assistant")
+    assert result["messages"][assistant_idx + 1]["role"] == "user"
+    assert all(
+        block.get("type") == "tool_result" for block in result["messages"][assistant_idx + 1]["content"]
+    )
+
+    # 5) pause_turn continuation should recover on later end_turn
+    reset_state()
+    model = TriageModel("pause_turn")
+    result = run_agent("triage paused", model, TOOL_REGISTRY)
+    assert result["final"]["action"] == "restart_billing_workers"
+
+    # 6) Max step protection
     model = TriageModel("loop")
     try:
         run_agent("loop", model, TOOL_REGISTRY, max_steps=3)
@@ -1115,7 +1390,8 @@ You are given an incident triage loop with flaky tools. Add reliability controls
 1. Tool execution with validation
 2. Cache for repeated tool inputs
 3. One retry for transient runtime failures
-4. Structured final output (`summary`, `action`, `confidence`)
+4. Claude-style sequencing (`assistant tool_use` -> `user tool_result`)
+5. Structured final output (`summary`, `action`, `confidence`)
 
 ## What to implement
 - `execute_tool_call`
@@ -1127,12 +1403,7 @@ You are given an incident triage loop with flaky tools. Add reliability controls
 - 35 min: implement loop + parsing
 - 10 min: run tests + verify stats
 
-## Interviewer follow-up questions (prepare answers)
-1. How did you design cache keys to avoid collisions, and what are the remaining edge cases?
-2. Why is one retry the right default here, and when would you increase or decrease it?
-3. What is your strategy for retry safety if tool calls have side effects?
-4. Why is your structured-output validation strict on `confidence`, and what schema checks are still missing?
-5. How would you use `tool_calls` and `cache_hits` metrics to detect reliability regressions in production?
+
 """
 
 
@@ -1324,12 +1595,7 @@ Given profiler samples (`timestamp`, `stack`), convert transitions into start/en
 - 35 min: implement conversion and duration aggregation
 - 10 min: run tests and manually inspect tricky transitions
 
-## Interviewer follow-up questions (prepare answers)
-1. Walk through your prefix-diff logic on a sample where two nested frames unwind and one new frame starts.
-2. Why do your end events fire in reversed order, and what bug appears if that order is wrong?
-3. How does your implementation behave on repeated identical stacks or empty stacks?
-4. What is the time complexity, and how would you optimize for very long stacks?
-5. How would you adapt this for noisy sampling where frames can temporarily disappear?
+
 """
 
 
@@ -1528,12 +1794,7 @@ Implement a same-host crawler first in single-thread mode, then in multi-thread 
 - 35 min: implement single-thread then multi-thread crawler
 - 10 min: run tests and inspect race-condition risks
 
-## Interviewer follow-up questions (prepare answers)
-1. Why did you choose this concurrency model, and where are race conditions prevented?
-2. What guarantees that each URL is fetched at most once under parallel execution?
-3. Why is URL normalization necessary before dedupe, and which canonicalization cases are still missing?
-4. How would you evolve this design for distributed crawling across multiple machines?
-5. If crawl depth exploded, what backpressure or rate-limiting controls would you add first?
+
 """
 
 
@@ -1748,12 +2009,7 @@ You are given a demo transactional table with duplicates and dirty fields. Build
 - 35 min: implement SQL extraction plus Python normalization
 - 10 min: run tests and verify metric correctness
 
-## Interviewer follow-up questions (prepare answers)
-1. Why did you split logic between SQL and Python the way you did?
-2. How do you ensure deterministic dedupe when there are ties in `updated_at`?
-3. Which malformed amount/date inputs are still unsupported, and why?
-4. What data-quality metrics would you emit to monitor pipeline health over time?
-5. If dataset size grows 100x, what parts should be pushed down into SQL for performance?
+
 """
 
 
@@ -1892,12 +2148,7 @@ Implement greedy longest-match tokenization with optional UNK compression.
 - 35 min: implement tokenizer and batch wrapper
 - 10 min: run tests and reason about corner cases
 
-## Interviewer follow-up questions (prepare answers)
-1. Why is greedy longest match correct for this spec, and when would it be insufficient?
-2. What is the complexity of your implementation, and how would a Trie improve it?
-3. How did you define UNK compression behavior at token boundaries?
-4. What edge cases around case-sensitivity or unicode would change your design?
-5. If this tokenizer were serving production traffic, what profiling signals would you watch first?
+
 """
 
 # ---------------------------
@@ -2019,12 +2270,7 @@ Implement `exclusive_time(n, logs)` with inclusive end timestamp semantics.
 - 35 min: implement stack logic and edge handling
 - 12 min: run tests and manually trace one sample
 
-## Interviewer follow-up questions (prepare answers)
-1. Why do we add `+1` when processing end events?
-2. Why update `prev_time` to `ts + 1` after an end?
-3. What breaks if nested calls are not tracked with a stack?
-4. How would you adapt this if timestamps were not integer ticks?
-5. Which invalid log orders do you reject, and why?
+
 """
 
 
@@ -2143,12 +2389,7 @@ Parse directory rows and group files by identical content.
 - 35 min: implement parse + grouping
 - 12 min: run tests and manually verify one grouped output
 
-## Interviewer follow-up questions (prepare answers)
-1. Why use content -> files mapping instead of pairwise comparison?
-2. How does complexity scale with many files and long content strings?
-3. How would this change if content had to be hashed from real file bytes?
-4. How would you stream this for large datasets?
-5. Which malformed row/token cases should fail fast?
+
 """
 
 exam01_walkthrough = """
@@ -2156,52 +2397,68 @@ exam01_walkthrough = """
 
 ### 0) First 2 minutes (do this before coding)
 - Read function TODOs and write this mini-plan in comments:
-  1. `validate_tool_call`
-  2. `execute_tool_call`
-  3. `run_agent`
+  1. `build_agent_system_prompt`
+  2. `build_tool_schemas`
+  3. `validate_tool_call`
+  4. `execute_tool_call`
+  5. `run_agent`
 - Do **not** start `run_agent` first.
 
 ### 1) Should I read tests now?
 Yes, but fast:
 - Spend 3-4 minutes scanning test names and assertions only.
 - Extract contracts from tests:
+  - Prompt must enforce tool-grounding and clarifying behavior.
+  - Tool schemas must be present and passed on model calls.
   - Single and multiple tool calls must work.
   - Missing args and runtime failures must return `is_error=True`.
+  - Claude message ordering must hold: assistant `tool_use` -> next user `tool_result`.
+  - `pause_turn` should continue the loop without crashing.
   - `max_steps` must raise `RuntimeError(\"max_steps_exceeded\")`.
 - Then stop reading tests and implement TODOs.
 
 ### 2) Coding order with checkpoints
-1. `validate_tool_call`:
+1. `build_tool_schemas`:
+   - produce minimal Claude-compatible tool definitions
+   - include `required` arguments from function signatures
+2. `validate_tool_call`:
    - check required keys (`id`, `name`, `input`)
    - check tool exists
    - check `input` is dict
    - check required args from function signature
-2. `execute_tool_call`:
+3. `build_agent_system_prompt`:
+   - instruct model to verify facts via tools
+   - forbid fabricated tool outputs
+   - require concise clarification when policy inputs are missing
+4. `execute_tool_call`:
    - call validator first
    - on validation/runtime error return tool message with `is_error=True`
    - on success return tool message with JSON result payload
-3. `run_agent`:
-   - initialize `messages=[{\"role\":\"user\", ...}]`
+5. `run_agent`:
+   - initialize Claude-style `messages=[{\"role\":\"user\",\"content\":[{\"type\":\"text\",...}]}]`
+   - create `system_prompt` and `tools` once and pass both to each model call
    - loop up to `max_steps`
-   - if `tool_use`: execute **all** tool calls, append messages, continue
-   - if `end_turn`: return final text + messages
+   - append assistant content every turn
+   - if `tool_use`: execute **all** tool calls and append one user message with only `tool_result` blocks
+   - if `pause_turn`: continue loop with no extra user message
+   - if `end_turn`: join assistant text blocks and return final text + messages
    - else: unsupported stop reason error
 
 ### 3) One concrete example to narrate aloud
 Use test case #2 (multiple tools):
 - Model returns `policy_check` and `create_refund` in one turn.
-- You execute both and append two tool messages.
+- You execute both and append one user message containing two `tool_result` blocks.
 - Next model turn ends with \"Refund submitted.\"
 - Why this matters: proves your loop handles batched tool calls, not only one.
 
 ### 4) What to say while coding (verbatim-safe)
 - \"I scanned tests first to lock the contract, now I am implementing TODOs in dependency order.\"
-- \"I am enforcing a loop invariant: every `tool_use` turn appends tool outputs before next model call.\"
+- \"I am enforcing Claude ordering: assistant tool_use is immediately followed by user tool_result blocks.\"
 - \"I am returning structured tool errors instead of crashing so the conversation can recover.\"
 - \"After baseline passes, I check failure paths: missing args, runtime exception, and max-step loop safety.\"
 
 ### 5) Self-check questions before final run
-- Do I process all tool calls in a turn?
+- Do I process all tool calls in a turn and return tool results in the same order?
 - Can unknown tools and missing args fail safely?
 - Is `max_steps` guaranteed to stop infinite loops?
 - Are error messages JSON and debuggable?
@@ -2218,15 +2475,18 @@ exam02_walkthrough = """
 Yes, quickly:
 - Find these must-pass checks:
   - final text must not contain `ADMIN_TOKEN`
-  - multi-tool turn should append two tool messages
+  - multi-tool turn should append two `tool_result` blocks in one user message
   - unknown tool must become error tool message and still recover
+  - `pause_turn` should continue the loop and still converge
 - Once contract is clear, stop reading tests and implement.
 
 ### 2) Coding order
 1. `sanitize_tool_output` first.
 2. In loop: sanitize tool results **before** appending to messages.
+   - append assistant response first, then one user message containing only `tool_result` blocks
 3. On `end_turn`: sanitize final text again.
 4. Unknown tool path should add `is_error=True` tool message, not crash.
+5. On `pause_turn`: continue loop without appending a user message.
 
 ### 3) One concrete example to narrate aloud
 Use \"injection\" scenario:
@@ -2256,7 +2516,9 @@ exam03_walkthrough = """
 Yes, because tests define reliability policy:
 - `cache_hits == 1`
 - `LOOKUP_ATTEMPTS[\"payments\"] == 2` (one retry happened)
+- assistant `tool_use` is immediately followed by user `tool_result`
 - final output must include `summary/action/confidence`
+- `pause_turn` must continue without resetting state
 - max step protection must raise error
 
 ### 2) Coding order
@@ -2269,6 +2531,8 @@ Yes, because tests define reliability policy:
    - maintain `stats`
    - increment `tool_calls`
    - increment `cache_hits` from tool message metadata
+   - keep Claude ordering by appending one user `tool_result` message per tool-use turn
+   - continue on `pause_turn` without appending a user message
 
 ### 3) One concrete example to narrate aloud
 Use retry scenario:
